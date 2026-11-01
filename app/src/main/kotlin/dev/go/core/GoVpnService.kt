@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.content.pm.PackageManager
 import hev.htproxy.TProxyService
 import dev.go.core.mobile.Bridge
 import dev.go.core.mobile.SocketProtector
