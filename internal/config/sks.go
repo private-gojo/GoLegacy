@@ -147,7 +147,7 @@ func decryptDES(raw []byte) ([]byte, error) {
 	if len(key) < 8 { return nil, errors.New("invalid legacy DES key") }
 	block, err := des.NewCipher(key[:8])
 	if err != nil { return nil, err }
-	data := bytes.TrimSpace(raw)
+	data := raw
 	if len(data) == 0 || len(data)%des.BlockSize != 0 { return nil, errors.New("invalid legacy DES ciphertext length") }
 	plain := make([]byte, len(data))
 	for offset := 0; offset < len(data); offset += des.BlockSize {
