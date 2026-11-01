@@ -36,18 +36,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          upstream_file="$(find "$RUNNER_TEMP/trilead213" -path '*/src/com/trilead/ssh2/Connection.java' -print -quit)"
-          test -n "$upstream_file"
-          upstream_dir="$(dirname "$upstream_file")"
+          upstream_dir="$RUNNER_TEMP/trilead213/trilead-ssh2-build213/src"
           local_dir="Legacy-Evolved/service/src/main/java/com/trilead/ssh2"
           output="$RUNNER_TEMP/trilead-build213-diff.txt"
           {
             echo "Baseline commit: 3d0b1838c0978051fb779a18bab37ac7a21e701f"
             echo "Upstream archive SHA-256: 12159627166ff0e51d4ddcd546c568492b0f461a89214a0f014eac9019831e36"
-            echo "Upstream source: $upstream_dir"
-            echo "Local source: $local_dir"
+            echo "Upstream source root: $upstream_dir"
+            echo "Local source root: $local_dir"
             echo
-            diff -ruN "$upstream_dir" "$local_dir" || true
+            while IFS= read -r upstream; do
+              relative="${upstream#"$upstream_dir"/}"
+              local="$local_dir/$relative"
+              if [[ -f "$local" ]]; then
+                diff -u "$upstream" "$local" || true
+              else
+                echo "LOCAL MISSING: $relative"
+              fi
+            done < <(find "$upstream_dir" -type f -name '*.java' | sort)
+            while IFS= read -r local; do
+              relative="${local#"$local_dir"/}"
+              upstream="$upstream_dir/$relative"
+              if [[ ! -f "$upstream" ]]; then
+                echo "UPSTREAM MISSING: $relative"
+              fi
+            done < <(find "$local_dir" -type f -name '*.java' | sort)
           } > "$output"
           cat "$output"
 
