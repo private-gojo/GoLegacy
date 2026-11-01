@@ -108,3 +108,13 @@ func TestProfileJSONSizeLimit(t *testing.T) {
 	raw := strings.Repeat("x", (1<<20)+1)
 	if _, err := ParseJSON(raw); err == nil { t.Fatal("oversized profile JSON was accepted") }
 }
+
+func TestAppFilterRequiresPackages(t *testing.T) {
+	p := Profile{Mode: ModeDirect, Host: "ssh.example", Port: 22, Username: "u", Password: "p", EnableFilterApps: true}
+	if err := p.Validate(); err == nil { t.Fatal("empty app filter was accepted") }
+}
+
+func TestRouteExclusionsRequireIPv4(t *testing.T) {
+	p := Profile{Mode: ModeDirect, Host: "ssh.example", Port: 22, Username: "u", Password: "p", ExcludeIPs: []string{"2001:db8::1"}}
+	if err := p.Validate(); err == nil { t.Fatal("IPv6 address accepted in IPv4 exclusion list") }
+}
