@@ -1,0 +1,2 @@
+-keep class dev.go.core.mobile.** { *; }
+-keep class hev.htproxy.** { *; }
