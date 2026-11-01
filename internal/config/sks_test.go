@@ -61,5 +61,29 @@ func TestImportSKSLockedMetadata(t *testing.T) {
 }
 
 func TestImportSKSRejectsExpired(t *testing.T) {
-	_ = time.UnixMilli(0)
+	raw := encryptTestProperties(t, map[string]string{
+		"file.appVersionCode":"644","file.proteger":"1","file.validade":"1000","file.msg":"expired",
+		"sshServer":"ssh.example.test","sshPort":"22","sshUser":"account","sshPass":"secret",
+		"tunnelType":"sshDirect","usarDefaultPayload":"1","dnsForward":"1","dnsResolver":"1.1.1.1",
+		"udpForward":"0","udpResolver":"127.0.0.1:7300",
+	})
+	if _, err := ImportSKS(raw, 644, time.UnixMilli(1000)); err == nil {
+		t.Fatal("expired profile accepted")
+	}
+}
+
+func encryptTestProperties(t *testing.T, props map[string]string) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	b.WriteString(xml.Header+"<properties>")
+	for k, v := range props { b.WriteString("<entry key=\\""+k+"\\">"+v+"</entry>") }
+	b.WriteString("</properties>")
+	salt := bytes.Repeat([]byte{7}, legacySaltBytes)
+	nonce := make([]byte, legacyGCMNonceBytes)
+	if _, err := rand.Read(nonce); err != nil { t.Fatal(err) }
+	key := pbkdf2.Key([]byte(legacyAESPassword), salt, legacyIterations, legacyAESKeyBytes, sha256.New)
+	block, err := aes.NewCipher(key); if err != nil { t.Fatal(err) }
+	aead, err := cipher.NewGCM(block); if err != nil { t.Fatal(err) }
+	encoded := base64.StdEncoding.EncodeToString(salt)+"."+base64.StdEncoding.EncodeToString(nonce)+"."+base64.StdEncoding.EncodeToString(aead.Seal(nil, nonce, b.Bytes(), nil))
+	return []byte(encoded)
 }
