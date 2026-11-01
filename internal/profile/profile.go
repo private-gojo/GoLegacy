@@ -102,6 +102,7 @@ func(p Profile)Validate()error{
 	if net.ParseIP(p.Host)==nil&&strings.Contains(p.Host,":"){return errors.New("invalid SSH host")}
 	if p.Port==0{return errors.New("SSH port is required")}
 	if p.Username==""{return errors.New("SSH username is required")}
+	if p.Password==""&&p.PrivateKey==""{return errors.New("SSH password or private key is required")}
 	if p.Mode==ModeProxy&&(p.ProxyHost==""||p.ProxyPort==0){return errors.New("proxy host and port are required for proxy mode")}
 	if p.KeepAliveSeconds<0||p.KeepAliveSeconds>3600{return errors.New("keepalive must be between 0 and 3600 seconds")}
 	if p.UDPForward || p.DNSForward {
