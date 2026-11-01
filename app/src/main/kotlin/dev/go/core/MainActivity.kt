@@ -113,6 +113,10 @@ class MainActivity : Activity() {
             setOnClickListener { pasteLockedURI() }
         })
         fields.addView(Button(this).apply {
+            text = "Paste URI list"
+            setOnClickListener { pasteURIList() }
+        })
+        fields.addView(Button(this).apply {
             text = "Paste SSH URI"
             setOnClickListener { pasteSSHURI() }
         })
@@ -462,6 +466,86 @@ class MainActivity : Activity() {
         } catch (e: Exception) {
             status.text = "Import failed: ${e.message ?: "invalid SSH URI"}"
         }
+    }
+
+    private fun pasteURIList() {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        val raw = clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+        val lines = raw.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.distinct().toList()
+        if (lines.isEmpty()) {
+            status.text = "Clipboard is empty"
+            return
+        }
+
+        val imported = mutableListOf<JSONObject>()
+        val locked = mutableListOf<Pair<Int, String>>()
+        val errors = mutableListOf<String>()
+        lines.forEachIndexed { index, line ->
+            try {
+                when {
+                    line.startsWith("ssh://") -> {
+                        val profile = JSONObject(importBridge.parseSSHURI(line))
+                        imported.add(JSONObject().put("profile", profile).put("locked", false).put("blockRoot", false))
+                    }
+                    line.startsWith("go-ssh://locked/") -> locked.add(index + 1 to line)
+                    else -> errors.add("Line ${index + 1}: unsupported URI")
+                }
+            } catch (e: Exception) {
+                errors.add("Line ${index + 1}: ${e.message ?: "invalid URI"}")
+            }
+        }
+
+        fun showImported() {
+            if (imported.isEmpty()) {
+                status.text = "Imported 0 profiles; errors: ${errors.size}"
+                if (errors.isNotEmpty()) {
+                    AlertDialog.Builder(this).setTitle("URI import results")
+                        .setMessage(errors.joinToString("\n")).setPositiveButton("OK", null).show()
+                }
+                return
+            }
+            val labels = imported.mapIndexed { index, item ->
+                val p = item.getJSONObject("profile")
+                "${index + 1}. ${p.optString("name").ifBlank { p.optString("host") }}"
+            }.toTypedArray()
+            val summary = "Imported ${imported.size} profile(s); errors: ${errors.size}"
+            AlertDialog.Builder(this).setTitle(summary)
+                .setItems(labels) { _, which -> applyImportedConfig(imported[which]) }
+                .setNegativeButton("Cancel", null)
+                .setNeutralButton("Details") { _, _ ->
+                    status.text = if (errors.isEmpty()) summary else errors.joinToString("; ")
+                }
+                .show()
+        }
+
+        if (locked.isEmpty()) {
+            showImported()
+            return
+        }
+
+        val passcode = EditText(this).apply {
+            hint = "Passcode for locked profiles (leave blank if none)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        AlertDialog.Builder(this).setTitle("Import URI list")
+            .setMessage("${locked.size} locked profile(s) found")
+            .setView(passcode)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Import") { _, _ ->
+                locked.forEach { (lineNumber, uri) ->
+                    try {
+                        val result = JSONObject(
+                            importBridge.importLockedURI(uri, passcode.text.toString(), System.currentTimeMillis())
+                        )
+                        imported.add(result)
+                    } catch (e: Exception) {
+                        errors.add("Line $lineNumber: ${e.message ?: "invalid locked URI"}")
+                    }
+                }
+                showImported()
+            }
+            .show()
     }
 
     private fun pasteLockedURI() {
