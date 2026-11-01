@@ -1,0 +1,70 @@
+package sshclient
+
+import (
+	"crypto/sha256"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"net"
+	"strings"
+	"sync"
+	"time"
+
+	"golang.org/x/crypto/ssh"
+
+	"dev.go.core/internal/profile"
+	"dev.go.core/internal/transport"
+)
+
+type Client struct {
+	mu sync.Mutex
+	conn net.Conn
+	client *ssh.Client
+}
+
+func (c *Client) Connect(p profile.Profile) error {
+	d := &transport.Dialer{}
+	raw, err := d.Dial(p)
+	if err != nil { return err }
+	cfg := &ssh.ClientConfig{User:p.Username, Timeout:15*time.Second, HostKeyCallback:hostKeyCallback(p)}
+	if p.Password != "" { cfg.Auth = append(cfg.Auth, ssh.Password(p.Password)) }
+	if p.PrivateKey != "" {
+		var signer ssh.Signer
+		if p.Passphrase != "" { signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(p.PrivateKey), []byte(p.Passphrase)) } else { signer, err = ssh.ParsePrivateKey([]byte(p.PrivateKey)) }
+		if err != nil { _=raw.Close(); return fmt.Errorf("parse SSH private key: %w",err) }
+		cfg.Auth = append(cfg.Auth,ssh.PublicKeys(signer))
+	}
+	if len(cfg.Auth)==0 { _=raw.Close(); return errors.New("SSH password or private key is required") }
+	cc, chans, reqs, err := ssh.NewClientConn(raw, net.JoinHostPort(p.Host, fmt.Sprint(p.Port)), cfg)
+	if err != nil { _=raw.Close(); return fmt.Errorf("SSH handshake: %w",err) }
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.conn=raw
+	c.client=ssh.NewClient(cc,chans,reqs)
+	return nil
+}
+
+func hostKeyCallback(p profile.Profile) ssh.HostKeyCallback {
+	if p.HostKeySHA256 == "" { return func(_ string,_ net.Addr,_ ssh.PublicKey) error { return nil } }
+	return func(_ string,_ net.Addr,key ssh.PublicKey) error {
+		sum:=sha256.Sum256(key.Marshal())
+		got:=base64.RawStdEncoding.EncodeToString(sum[:])
+		want:=strings.TrimPrefix(p.HostKeySHA256,"SHA256:")
+		if got!=want { return errors.New("SSH host key fingerprint mismatch") }
+		return nil
+	}
+}
+
+func (c *Client) Dial(network, address string)(net.Conn,error) {
+	c.mu.Lock(); client:=c.client; c.mu.Unlock()
+	if client==nil { return nil,errors.New("SSH client is not connected") }
+	return client.Dial(network,address)
+}
+
+func (c *Client) Close() error {
+	c.mu.Lock(); defer c.mu.Unlock()
+	var err error
+	if c.client!=nil { err=c.client.Close(); c.client=nil }
+	if c.conn!=nil { _=c.conn.Close(); c.conn=nil }
+	return err
+}
