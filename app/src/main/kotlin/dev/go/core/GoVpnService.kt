@@ -67,7 +67,7 @@ class GoVpnService : VpnService() {
 
     private fun startTunnelOnce(raw: String) {
         bridge.setSocketProtector(object : SocketProtector {
-            override fun protect(fd: Int): Boolean = this@GoVpnService.protect(fd)
+            override fun protect(fd: Long): Boolean = this@GoVpnService.protect(fd.toInt())
         })
         bridge.connect(raw)
         val profile = JSONObject(raw)
