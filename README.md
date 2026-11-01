@@ -20,13 +20,14 @@ SSH password and private-key authentication are supported. Legacy Trilead client
 
 ## VPN features
 
-- IPv4 default routing with private, local TUN, DNS, and user-defined route exclusions.
+- IPv4-only routing, matching the legacy native stack; IPv6 TUN routing is not implemented.
+- Default routing with private, local TUN, DNS, and user-defined route exclusions.
 - Per-app allow-list and bypass-list modes.
 - Optional tethering subnet bypass.
 - TCP and UDP forwarding through the local SOCKS5 endpoint.
 - BadVPN UDPGW framing over the SSH connection.
 - DNS forwarding uses TCP to the configured resolver over SSH, matching the legacy `pdnsd` `tcp_only` mode.
-- Non-DNS UDP forwarding uses BadVPN UDPGW over SSH.
+- Non-DNS UDP forwarding uses BadVPN UDPGW over SSH; the remote UDPGW daemon must be available on the SSH server at the configured endpoint.
 - Reconnect loop with exponential backoff.
 - Android `VpnService.protect()` callback for tunnel sockets.
 
