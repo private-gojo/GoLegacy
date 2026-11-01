@@ -43,7 +43,7 @@ func TestDecryptLegacyDES(t *testing.T) {
 func TestImportSKSLockedMetadata(t *testing.T) {
 	props:=map[string]string{
 		"file.appVersionCode":"644","file.proteger":"1","file.validade":"0","file.msg":"locked profile",
-		"sshServer":"ssh.example.test","sshPort":"22","sshUser":"account","sshPass":"secret",
+		"sshServer":"ssh.example.test","sshPort":"22","sshPortaLocal":"1080","sshUser":"account","sshPass":"secret",
 		"tunnelType":"sshDirect","usarDefaultPayload":"1","dnsForward":"1","dnsResolver":"1.1.1.1",
 		"udpForward":"1","udpResolver":"127.0.0.1:7300",
 	}
