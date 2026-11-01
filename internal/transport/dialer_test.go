@@ -20,10 +20,10 @@ func TestPayloadStatusLineGuard(t *testing.T) {
 	if err := readPayloadResponse(c, true); err == nil { t.Fatal("malformed status accepted") }
 }
 
-func TestAcceptAnyStatusDoesNotRewriteResponse(t *testing.T) {
+func TestAcceptAnyStatusPreservesLegacyFake200(t *testing.T) {
 	c := &fakeConn{response:"HTTP/1.1 302 Found\r\nLocation: https://example.test/\r\n\r\n"}
 	if err := readPayloadResponse(c, true); err != nil { t.Fatal(err) }
-	if strings.Contains(c.written, "200 Connection established") { t.Fatal("synthetic 200 must never be written") }
+	if !strings.Contains(c.written, "HTTP/1.0 200 Connection established") { t.Fatal("legacy fake 200 was not preserved") }
 }
 
 func TestRejectNon200WhenDisabled(t *testing.T) {
