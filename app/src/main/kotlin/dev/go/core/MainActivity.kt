@@ -57,6 +57,7 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var exportButton: Button
     private var pendingProfile: String? = null
+    private var pendingExportJson: String? = null
     private var lockedProfileRaw: String? = null
     private var importedBlockRoot = false
     private val hiddenProfileViews = mutableListOf<android.view.View>()
@@ -98,6 +99,14 @@ class MainActivity : Activity() {
         fields.addView(Button(this).apply {
             text = "Import legacy .sks"
             setOnClickListener { chooseLegacyProfile() }
+        })
+        fields.addView(Button(this).apply {
+            text = "Import Go JSON"
+            setOnClickListener { chooseGoProfile() }
+        })
+        fields.addView(Button(this).apply {
+            text = "Export profile JSON"
+            setOnClickListener { exportProfileJson() }
         })
         fields.addView(Button(this).apply {
             text = "Paste locked Go URI"
@@ -286,6 +295,48 @@ class MainActivity : Activity() {
             .setType("*/*")
             .addCategory(Intent.CATEGORY_OPENABLE)
         startActivityForResult(intent, LEGACY_PROFILE_REQUEST)
+    }
+
+    private fun chooseGoProfile() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .setType("application/json")
+            .addCategory(Intent.CATEGORY_OPENABLE)
+        startActivityForResult(intent, GO_PROFILE_IMPORT_REQUEST)
+    }
+
+    private fun importGoProfile(uri: android.net.Uri) {
+        try {
+            val raw = contentResolver.openInputStream(uri)?.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (output.size() + count > 1_048_576) error("Profile exceeds 1 MiB")
+                    output.write(buffer, 0, count)
+                }
+                output.toString(Charsets.UTF_8.name())
+            } ?: error("Unable to read selected profile")
+            importBridge.validateProfile(raw)
+            applyImportedConfig(
+                JSONObject().put("profile", JSONObject(raw)).put("locked", false).put("blockRoot", false)
+            )
+        } catch (e: Exception) {
+            status.text = "Import failed: ${e.message ?: "invalid Go profile"}"
+        }
+    }
+
+    private fun exportProfileJson() {
+        if (lockedProfileRaw != null) {
+            status.text = "Locked profiles cannot be exported as editable JSON"
+            return
+        }
+        pendingExportJson = buildProfileJson()
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .setType("application/json")
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .putExtra(Intent.EXTRA_TITLE, "Go-profile.json")
+        startActivityForResult(intent, GO_PROFILE_EXPORT_REQUEST)
     }
 
     private fun applyImportedConfig(result: JSONObject) {
@@ -520,6 +571,24 @@ class MainActivity : Activity() {
             data?.data?.let { importLegacyProfile(it) }
             return
         }
+        if (requestCode == GO_PROFILE_IMPORT_REQUEST && resultCode == RESULT_OK) {
+            data?.data?.let { importGoProfile(it) }
+            return
+        }
+        if (requestCode == GO_PROFILE_EXPORT_REQUEST) {
+            val raw = pendingExportJson
+            pendingExportJson = null
+            if (resultCode == RESULT_OK && raw != null && data?.data != null) {
+                try {
+                    contentResolver.openOutputStream(data.data!!)?.use { it.write(raw.toByteArray(Charsets.UTF_8)) }
+                        ?: error("Unable to write profile")
+                    status.text = "Go profile exported"
+                } catch (e: Exception) {
+                    status.text = "Export failed: ${e.message ?: "write error"}"
+                }
+            }
+            return
+        }
         if (requestCode == VPN_PERMISSION_REQUEST) {
             val profile = pendingProfile
             pendingProfile = null
@@ -534,5 +603,7 @@ class MainActivity : Activity() {
     companion object {
         private const val VPN_PERMISSION_REQUEST = 4101
         private const val LEGACY_PROFILE_REQUEST = 4102
+        private const val GO_PROFILE_IMPORT_REQUEST = 4103
+        private const val GO_PROFILE_EXPORT_REQUEST = 4104
     }
 }
