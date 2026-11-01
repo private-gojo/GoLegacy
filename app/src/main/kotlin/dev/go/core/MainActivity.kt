@@ -1,9 +1,10 @@
 package dev.go.core
 
 import android.app.Activity
+import android.content.Intent
+import android.net.VpnService
+import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.Gravity
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -13,13 +14,8 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import org.json.JSONObject
-import dev.go.core.mobile.Bridge
-import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
-    private val worker = Executors.newSingleThreadExecutor()
-    private val main = Handler(Looper.getMainLooper())
-    private val bridge = Bridge()
     private lateinit var fields: LinearLayout
     private lateinit var host: EditText
     private lateinit var port: EditText
@@ -33,6 +29,7 @@ class MainActivity : Activity() {
     private lateinit var dnsResolver: EditText
     private lateinit var mode: Spinner
     private lateinit var status: TextView
+    private var pendingProfile: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,33 +129,52 @@ class MainActivity : Activity() {
             .put("udpResolver", udpResolver.text.toString().trim())
             .put("dnsForward", true)
             .put("dnsResolver", dnsResolver.text.toString().trim())
+            .toString()
 
-        status.text = "Connecting..."
-        worker.execute {
-            try {
-                bridge.connect(profile.toString())
-                val address = bridge.socksAddress()
-                main.post { status.text = "SSH connected · SOCKS5 $address" }
-            } catch (e: Exception) {
-                main.post { status.text = "Connection failed: ${e.message ?: "unknown error"}" }
-            }
+        pendingProfile = profile
+        val permission = VpnService.prepare(this)
+        if (permission != null) {
+            startActivityForResult(permission, VPN_PERMISSION_REQUEST)
+        } else {
+            startVpnService(profile)
         }
+    }
+
+    private fun startVpnService(profile: String) {
+        val intent = Intent(this, GoVpnService::class.java)
+            .setAction(GoVpnService.ACTION_CONNECT)
+            .putExtra(GoVpnService.EXTRA_PROFILE, profile)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+        status.text = "Starting VPN..."
     }
 
     private fun disconnect() {
-        worker.execute {
-            try {
-                bridge.close()
-                main.post { status.text = "Disconnected" }
-            } catch (e: Exception) {
-                main.post { status.text = "Disconnect error: ${e.message ?: "unknown error"}" }
+        startService(
+            Intent(this, GoVpnService::class.java)
+                .setAction(GoVpnService.ACTION_DISCONNECT)
+        )
+        status.text = "Disconnecting..."
+    }
+
+    @Deprecated("Deprecated in Android")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == VPN_PERMISSION_REQUEST) {
+            val profile = pendingProfile
+            pendingProfile = null
+            if (resultCode == RESULT_OK && profile != null) {
+                startVpnService(profile)
+            } else {
+                status.text = "VPN permission denied"
             }
         }
     }
 
-    override fun onDestroy() {
-        worker.execute { bridge.close() }
-        worker.shutdown()
-        super.onDestroy()
+    companion object {
+        private const val VPN_PERMISSION_REQUEST = 4101
     }
 }
