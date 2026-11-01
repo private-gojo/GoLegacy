@@ -49,7 +49,7 @@ func(b *Bridge)Connect(profileJSON string)error{
 	return nil
 }
 
-func(b *Bridge)Wait() error {
+func(b *Bridge)WaitForSSH() error {
 	b.mu.Lock()
 	client := b.ssh
 	b.mu.Unlock()

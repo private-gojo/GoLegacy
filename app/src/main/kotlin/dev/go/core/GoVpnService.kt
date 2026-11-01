@@ -62,7 +62,7 @@ class GoVpnService : VpnService() {
         while (!stopRequested) {
             try {
                 startTunnelOnce(raw)
-                val waiter = Thread { bridge.wait() }.apply {
+                val waiter = Thread { bridge.waitForSSH() }.apply {
                     name = "go-ssh-waiter"
                     isDaemon = true
                     start()
