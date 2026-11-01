@@ -39,7 +39,8 @@ jobs:
           set +o pipefail
           yes | "$SDKMANAGER" --licenses
           set -o pipefail
-          "$SDKMANAGER" --channel=3 --install "platforms;android-37" "build-tools;36.0.0" "ndk;30.0.16248370"
+          "$SDKMANAGER" --channel=3 --install "platforms;android-37.0" "build-tools;37.0.0" "ndk;30.0.16248370"
+          ln -sfn android-37.0 "$ANDROID_HOME/platforms/android-37"
       - name: Install gomobile
         run: go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20261011034528-197770444867
       - name: Initialize gomobile
