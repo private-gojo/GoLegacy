@@ -24,6 +24,7 @@ type Server struct {
 	Dial DialFunc
 	UDP UDPForwarder
 	DNSForward bool
+	DNSResolver string
 	UDPOnlyDNS bool
 	listener net.Listener
 	mu sync.Mutex
@@ -81,7 +82,7 @@ func(s *Server)handleConnect(c net.Conn,host string,port uint16){
 }
 
 func(s *Server)handleUDPAssociate(control net.Conn,requestedHost string,requestedPort uint16){
-	if s.UDP==nil{_,_=control.Write([]byte{5,7,0,1,0,0,0,0,0,0});return}
+	if s.UDP==nil&&!s.DNSForward{_,_=control.Write([]byte{5,7,0,1,0,0,0,0,0,0});return}
 	udp,err:=net.ListenUDP("udp4",&net.UDPAddr{IP:net.IPv4(127,0,0,1)})
 	if err!=nil{_,_=control.Write([]byte{5,1,0,1,0,0,0,0,0,0});return}
 	id:=fmt.Sprintf("socks-udp-%d",atomic.AddUint64(&s.nextAssociation,1))
@@ -113,10 +114,44 @@ func(s *Server)udpLoop(id string,udp *net.UDPConn,requestedHost string,requested
 		if !allowed{continue}
 		remote,payload,err:=parseUDPRequest(buf[:n]);if err!=nil{continue}
 		isDNS:=s.DNSForward&&remote.Port==53
-		if s.UDPOnlyDNS && !isDNS { continue }
 		replyFn:=func(data []byte){packet,e:=makeUDPResponse(remote,data);if e!=nil{return};_,_=udp.WriteToUDP(packet,target)}
-		_=s.UDP.Send(id,remote,payload,isDNS,replyFn)
+		if isDNS {
+			response, forwardErr := s.forwardDNS(payload)
+			if forwardErr == nil { replyFn(response) }
+			continue
+		}
+		if s.UDPOnlyDNS || s.UDP == nil { continue }
+		_=s.UDP.Send(id,remote,payload,false,replyFn)
 	}
+}
+
+func(s *Server)forwardDNS(query []byte)([]byte,error){
+	if len(query)==0||len(query)>65535{return nil,errors.New("invalid DNS query length")}
+	if s.DNSResolver==""{return nil,errors.New("DNS resolver is not configured")}
+	conn,err:=s.Dial("tcp",net.JoinHostPort(s.DNSResolver,"53"))
+	if err!=nil{return nil,err}
+	defer conn.Close()
+	_=conn.SetDeadline(time.Now().Add(10*time.Second))
+	var length [2]byte
+	binary.BigEndian.PutUint16(length[:],uint16(len(query)))
+	if err=writeFull(conn,length[:]);err!=nil{return nil,err}
+	if err=writeFull(conn,query);err!=nil{return nil,err}
+	if _,err=io.ReadFull(conn,length[:]);err!=nil{return nil,err}
+	n:=int(binary.BigEndian.Uint16(length[:]))
+	if n==0{return nil,errors.New("empty DNS response")}
+	response:=make([]byte,n)
+	if _,err=io.ReadFull(conn,response);err!=nil{return nil,err}
+	return response,nil
+}
+
+func writeFull(w io.Writer,data []byte)error{
+	for len(data)>0{
+		n,err:=w.Write(data)
+		if err!=nil{return err}
+		if n==0{return io.ErrShortWrite}
+		data=data[n:]
+	}
+	return nil
 }
 
 func(s *Server)closeUDPAssociation(id string){
