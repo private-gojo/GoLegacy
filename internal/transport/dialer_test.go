@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"bufio"
 	"io"
 	"net"
 	"strings"
@@ -43,3 +44,47 @@ func (f *fakeConn) SetWriteDeadline(time.Time)error{return nil}
 type fakeAddr string
 func (a fakeAddr) Network()string{return "test"}
 func (a fakeAddr) String()string{return string(a)}
+
+func TestAcceptAnyStatusLiveProxyDoesNotWriteSynthetic200(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil { t.Fatal(err) }
+	defer listener.Close()
+
+	serverResult := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil { serverResult <- err; return }
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		for {
+			line, readErr := reader.ReadString('\\n')
+			if readErr != nil { serverResult <- readErr; return }
+			if line == "\\r\\n" { break }
+		}
+		if _, err = io.WriteString(conn, "HTTP/1.1 302 Found\\r\\nLocation: https://example.test/\\r\\n\\r\\n"); err != nil {
+			serverResult <- err
+			return
+		}
+		_ = conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		buffer := make([]byte, 256)
+		n, _ := conn.Read(buffer)
+		if n > 0 && strings.Contains(string(buffer[:n]), "200 Connection established") {
+			serverResult <- errors.New("synthetic 200 was written to the proxy")
+			return
+		}
+		serverResult <- nil
+	}()
+
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil { t.Fatal(err) }
+	defer conn.Close()
+	if err := writeAndCheck(conn, []byte("CONNECT ssh.example:22 HTTP/1.0\\r\\n\\r\\n"), true); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-serverResult:
+		if err != nil { t.Fatal(err) }
+	case <-time.After(time.Second):
+		t.Fatal("proxy runtime check timed out")
+	}
+}
