@@ -2,6 +2,9 @@ package dev.go.core
 
 import android.app.Activity
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
@@ -30,6 +33,13 @@ class MainActivity : Activity() {
     private lateinit var mode: Spinner
     private lateinit var status: TextView
     private var pendingProfile: String? = null
+    private var receiverRegistered = false
+    private val statusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != GoVpnService.ACTION_STATUS) return
+            status.text = intent.getStringExtra(GoVpnService.EXTRA_MESSAGE) ?: "VPN status changed"
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,6 +91,26 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(actions)
         setContentView(root)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(GoVpnService.ACTION_STATUS)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(statusReceiver, filter)
+        }
+        receiverRegistered = true
+    }
+
+    override fun onStop() {
+        if (receiverRegistered) {
+            unregisterReceiver(statusReceiver)
+            receiverRegistered = false
+        }
+        super.onStop()
     }
 
     private fun input(hint: String, value: String = "", password: Boolean = false): EditText {
