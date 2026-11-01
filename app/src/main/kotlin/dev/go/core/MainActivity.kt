@@ -41,6 +41,8 @@ class MainActivity : Activity() {
     private lateinit var passphrase: EditText
     private lateinit var proxyHost: EditText
     private lateinit var proxyPort: EditText
+    private lateinit var proxyUsername: EditText
+    private lateinit var proxyPassword: EditText
     private lateinit var sni: EditText
     private lateinit var payload: EditText
     private lateinit var tlsFingerprint: EditText
@@ -154,6 +156,8 @@ class MainActivity : Activity() {
         passphrase = input("Private key passphrase", password = true)
         proxyHost = input("Proxy host")
         proxyPort = input("Proxy port")
+        proxyUsername = input("Proxy username (optional)")
+        proxyPassword = input("Proxy password", password = true)
         sni = input("SNI")
         payload = input("Custom payload")
         tlsFingerprint = input("TLS SHA-256 fingerprint (optional)")
@@ -283,6 +287,8 @@ class MainActivity : Activity() {
             .put("passphrase", passphrase.text.toString())
             .put("proxyHost", proxyHost.text.toString().trim())
             .put("proxyPort", proxyPort.text.toString().toIntOrNull() ?: 0)
+            .put("proxyUsername", proxyUsername.text.toString())
+            .put("proxyPassword", proxyPassword.text.toString())
             .put("sni", sni.text.toString().trim())
             .put("payload", payload.text.toString())
             .put("tlsFingerprint", tlsFingerprint.text.toString().trim())
@@ -389,6 +395,8 @@ class MainActivity : Activity() {
         passphrase.setText(imported.optString("passphrase"))
         proxyHost.setText(imported.optString("proxyHost"))
         proxyPort.setText(imported.optString("proxyPort"))
+        proxyUsername.setText(imported.optString("proxyUsername"))
+        proxyPassword.setText(imported.optString("proxyPassword"))
         sni.setText(imported.optString("sni"))
         payload.setText(imported.optString("payload"))
         tlsFingerprint.setText(imported.optString("tlsFingerprint"))
@@ -518,6 +526,8 @@ class MainActivity : Activity() {
         passphrase.setText("")
         proxyHost.setText("")
         proxyPort.setText("")
+        proxyUsername.setText("")
+        proxyPassword.setText("")
         sni.setText("")
         payload.setText("")
         tlsFingerprint.setText("")
