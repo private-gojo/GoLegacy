@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
+import android.net.IpPrefix
+import java.net.InetAddress
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -90,6 +92,7 @@ class GoVpnService : VpnService() {
             try {
                 startTunnelOnce(raw, generation)
                 if (generation != requestGeneration || stopRequested) return
+                retryDelay = 1_000L
                 val waiter = Thread { bridge.waitForSSH() }.apply {
                     name = "go-ssh-waiter"
                     isDaemon = true
@@ -139,12 +142,20 @@ class GoVpnService : VpnService() {
             ?: error("Invalid local SOCKS5 endpoint")
         val dns = profile.optString("dnsResolver", "1.1.1.1").ifBlank { "1.1.1.1" }
 
+        val dnsForward = profile.optBoolean("dnsForward", true)
         val builder = Builder()
             .setSession("Go")
             .setMtu(1500)
             .addAddress("198.18.0.1", 32)
-            .addRoute("0.0.0.0", 0)
-        if (profile.optBoolean("dnsForward", true)) builder.addDnsServer(dns)
+        builder.addDnsServer(dns)
+        val excludedRoutes = mutableListOf("10.0.0.0/8")
+        if (!dnsForward) excludedRoutes.add("$dns/32")
+        if (Build.VERSION.SDK_INT >= 33) {
+            builder.addRoute("0.0.0.0", 0)
+            excludedRoutes.forEach { builder.excludeRoute(IpPrefix(it)) }
+        } else {
+            addIpv4RoutesExcluding(builder, excludedRoutes)
+        }
         val descriptor = builder.establish() ?: error("VPN interface creation was denied")
         tun = descriptor
         if (generation != requestGeneration || stopRequested) {
@@ -182,6 +193,43 @@ class GoVpnService : VpnService() {
         }
         updateNotification("Go VPN connected")
         broadcastStatus("connected", "VPN connected")
+    }
+
+    private fun addIpv4RoutesExcluding(builder: Builder, cidrs: List<String>) {
+        val excluded = cidrs.map { cidr ->
+            val parts = cidr.split("/")
+            val prefix = parts.getOrNull(1)?.toIntOrNull() ?: 32
+            require(prefix in 0..32) { "Invalid IPv4 prefix: $cidr" }
+            val bytes = InetAddress.getByName(parts[0]).address
+            require(bytes.size == 4) { "IPv4 route required: $cidr" }
+            val value = bytes.fold(0L) { acc, byte -> (acc shl 8) or (byte.toLong() and 0xff) }
+            val mask = if (prefix == 0) 0L else (0xffffffffL shl (32 - prefix)) and 0xffffffffL
+            val start = value and mask
+            val size = 1L shl (32 - prefix)
+            start to (start + size - 1)
+        }
+
+        fun addRoute(network: Long, prefix: Int) {
+            val size = 1L shl (32 - prefix)
+            val end = network + size - 1
+            val overlaps = excluded.filter { it.first <= end && it.second >= network }
+            if (overlaps.isEmpty()) {
+                val address = listOf(
+                    (network shr 24) and 0xff,
+                    (network shr 16) and 0xff,
+                    (network shr 8) and 0xff,
+                    network and 0xff
+                ).joinToString(".")
+                builder.addRoute(address, prefix)
+                return
+            }
+            if (overlaps.any { it.first <= network && it.second >= end } || prefix == 32) return
+            val half = size / 2
+            addRoute(network, prefix + 1)
+            addRoute(network + half, prefix + 1)
+        }
+
+        addRoute(0L, 0)
     }
 
     private fun cleanupTunnel() {
