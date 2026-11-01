@@ -84,7 +84,7 @@ func ParseURI(raw string)(Profile,error){
 	if u.Scheme!="ssh"{return Profile{},errors.New("unsupported URI scheme")}
 	port:=u.Port();if port==""{port="22"}
 	n,err:=strconv.ParseUint(port,10,16);if err!=nil||n==0{return Profile{},errors.New("invalid SSH port")}
-	p:=Profile{Mode:ModeDirect,Host:u.Hostname(),Port:uint16(n),LocalSocksPort:1080,KeepAliveSeconds:3,AcceptAnyStatus:true,DisableDelaySSH:true,UDPForward:true,UDPResolver:"127.0.0.1:7300",DNSForward:true,DNSResolver:"1.1.1.1"}
+	p:=Profile{Mode:ModeDirect,Host:u.Hostname(),Port:uint16(n),LocalSocksPort:1080,KeepAliveSeconds:3,AcceptAnyStatus:true,DisableDelaySSH:true,UDPForward:true,UDPResolver:"127.0.0.1:7300",DNSForward:true,DNSResolver:"1.1.1.1",ConnectTimeoutMs:10000,HandshakeTimeoutMs:20000}
 	if u.User!=nil{p.Username=u.User.Username();p.Password,_=u.User.Password()}
 	q:=u.Query()
 	if q.Get("mode")!=""{p.Mode=Mode(q.Get("mode"))}
