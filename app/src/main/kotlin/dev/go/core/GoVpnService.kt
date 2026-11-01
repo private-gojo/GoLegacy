@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import hev.htproxy.TProxyService
 import dev.go.core.mobile.Bridge
@@ -18,6 +20,8 @@ import java.util.concurrent.Executors
 class GoVpnService : VpnService() {
     private val worker = Executors.newSingleThreadExecutor()
     private val bridge = Bridge()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var expiryRunnable: Runnable? = null
     @Volatile private var tun: ParcelFileDescriptor? = null
     @Volatile private var running = false
     @Volatile private var stopRequested = false
@@ -46,6 +50,12 @@ class GoVpnService : VpnService() {
     }
 
     private fun startTunnel(raw: String) {
+        val expiry = JSONObject(raw).optLong("expiryUnixMilli", 0L)
+        if (expiry > 0L && System.currentTimeMillis() >= expiry) {
+            broadcastStatus("error", "Profile expired")
+            stopTunnel()
+            return
+        }
         var retryDelay = 1_000L
         while (!stopRequested) {
             try {
@@ -76,13 +86,13 @@ class GoVpnService : VpnService() {
             ?: error("Invalid local SOCKS5 endpoint")
         val dns = profile.optString("dnsResolver", "1.1.1.1").ifBlank { "1.1.1.1" }
 
-        val descriptor = Builder()
+        val builder = Builder()
             .setSession("Go")
             .setMtu(1500)
             .addAddress("198.18.0.1", 32)
             .addRoute("0.0.0.0", 0)
-            .addDnsServer(dns)
-            .establish() ?: error("VPN interface creation was denied")
+        if (profile.optBoolean("dnsForward", true)) builder.addDnsServer(dns)
+        val descriptor = builder.establish() ?: error("VPN interface creation was denied")
         tun = descriptor
 
         val config = File(cacheDir, "hev-socks5.yml")
@@ -102,6 +112,14 @@ class GoVpnService : VpnService() {
             "HEV tunnel failed to start"
         }
         running = true
+        if (profile.optLong("expiryUnixMilli", 0L) > 0L) {
+            val delay = (profile.optLong("expiryUnixMilli") - System.currentTimeMillis()).coerceAtLeast(0L)
+            expiryRunnable = Runnable {
+                stopRequested = true
+                worker.execute { stopTunnel() }
+            }
+            mainHandler.postDelayed(expiryRunnable!!, delay)
+        }
         updateNotification("Go VPN connected")
         broadcastStatus("connected", "VPN connected")
     }
@@ -118,6 +136,8 @@ class GoVpnService : VpnService() {
 
     private fun stopTunnel() {
         stopRequested = true
+        expiryRunnable?.let { mainHandler.removeCallbacks(it) }
+        expiryRunnable = null
         cleanupTunnel()
         updateNotification("Go VPN disconnected")
         broadcastStatus("disconnected", "VPN disconnected")
@@ -174,6 +194,8 @@ class GoVpnService : VpnService() {
 
     override fun onDestroy() {
         stopRequested = true
+        expiryRunnable?.let { mainHandler.removeCallbacks(it) }
+        expiryRunnable = null
         worker.execute { cleanupTunnel() }
         worker.shutdown()
         super.onDestroy()

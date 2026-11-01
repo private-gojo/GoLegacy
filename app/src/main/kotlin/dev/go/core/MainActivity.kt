@@ -267,6 +267,8 @@ class MainActivity : Activity() {
         lockedProfileRaw = null
         importedBlockRoot = result.optBoolean("blockRoot")
         imported.put("blockRoot", importedBlockRoot)
+        imported.put("expiryUnixMilli", result.optLong("expiryUnixMilli", 0L))
+        imported.put("message", result.optString("message"))
         mode.setSelection(
             when (imported.optString("mode")) {
                 "proxy" -> 1
