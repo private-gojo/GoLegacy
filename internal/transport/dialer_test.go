@@ -89,3 +89,10 @@ func TestAcceptAnyStatusLiveProxyDoesNotWriteSynthetic200(t *testing.T) {
 		t.Fatal("proxy runtime check timed out")
 	}
 }
+
+func TestWriteFullHandlesPartialWrites(t *testing.T) {
+	base := &fakeConn{}
+	conn := &shortWriteConn{fakeConn: base, max: 2}
+	if err := writeFull(conn, []byte("abcdef")); err != nil { t.Fatal(err) }
+	if base.written != "abcdef" { t.Fatalf("written=%q", base.written) }
+}
