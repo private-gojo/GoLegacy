@@ -126,3 +126,11 @@ func TestSSHTimeoutsMatchLegacyDefaults(t *testing.T) {
 		t.Fatalf("timeouts connect=%d handshake=%d", p.ConnectTimeoutMs, p.HandshakeTimeoutMs)
 	}
 }
+
+func TestSSHURIImportsProxyCredentials(t *testing.T) {
+	p, err := ParseURI("ssh://user:pass@ssh.example.test:22?mode=proxy&proxyHost=proxy.example.test&proxyPort=8080&proxyUsername=proxy-user&proxyPassword=proxy-pass")
+	if err != nil { t.Fatal(err) }
+	if p.ProxyUsername != "proxy-user" || p.ProxyPassword != "proxy-pass" {
+		t.Fatalf("proxy credentials not imported: %+v", p)
+	}
+}
