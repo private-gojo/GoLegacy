@@ -51,7 +51,9 @@ func ParseJSON(raw string)(Profile,error){
 	if err:=json.Unmarshal([]byte(raw),&p);err!=nil{return p,fmt.Errorf("decode profile: %w",err)}
 	var fields map[string]json.RawMessage
 	if err:=json.Unmarshal([]byte(raw),&fields);err!=nil{return p,err}
+	if p.Mode==""{p.Mode=ModeDirect}
 	if _,ok:=fields["acceptAnyStatus"];!ok{p.AcceptAnyStatus=true}
+	if _,ok:=fields["disableDelaySSH"];!ok{p.DisableDelaySSH=true}
 	if _,ok:=fields["udpForward"];!ok{p.UDPForward=true}
 	if _,ok:=fields["udpResolver"];!ok{p.UDPResolver="127.0.0.1:7300"}
 	if _,ok:=fields["dnsForward"];!ok{p.DNSForward=true}
@@ -64,7 +66,7 @@ func ParseURI(raw string)(Profile,error){
 	if u.Scheme!="ssh"{return Profile{},errors.New("unsupported URI scheme")}
 	port:=u.Port();if port==""{port="22"}
 	n,err:=strconv.ParseUint(port,10,16);if err!=nil||n==0{return Profile{},errors.New("invalid SSH port")}
-	p:=Profile{Mode:ModeDirect,Host:u.Hostname(),Port:uint16(n),AcceptAnyStatus:true,UDPForward:true,UDPResolver:"127.0.0.1:7300",DNSForward:true,DNSResolver:"1.1.1.1"}
+	p:=Profile{Mode:ModeDirect,Host:u.Hostname(),Port:uint16(n),AcceptAnyStatus:true,DisableDelaySSH:true,UDPForward:true,UDPResolver:"127.0.0.1:7300",DNSForward:true,DNSResolver:"1.1.1.1"}
 	if u.User!=nil{p.Username=u.User.Username();p.Password,_=u.User.Password()}
 	q:=u.Query()
 	if q.Get("mode")!=""{p.Mode=Mode(q.Get("mode"))}

@@ -35,3 +35,15 @@ func TestProxyModeRequiresProxyEndpoint(t *testing.T){
 	p:=Profile{Mode:ModeProxy,Host:"ssh.example",Port:22,Username:"u"}
 	if err:=p.Validate();err==nil{t.Fatal("expected proxy endpoint validation")}
 }
+
+func TestSSHURIImport(t *testing.T) {
+	p,err:=ParseURI("ssh://user:pass@ssh.example.test:2222?mode=proxy&proxyHost=proxy.example.test&proxyPort=8080&sni=front.example.test&acceptAnyStatus=true#test")
+	if err!=nil{t.Fatal(err)}
+	if p.Host!="ssh.example.test"||p.Port!=2222||p.Username!="user"||p.Password!="pass"||p.Mode!=ModeProxy||p.ProxyHost!="proxy.example.test"||p.ProxyPort!=8080||p.SNI!="front.example.test"||p.Name!="test"{t.Fatalf("unexpected profile: %+v",p)}
+}
+
+func TestJSONDefaultsTCPNoDelayToLegacySetting(t *testing.T) {
+	p,err:=ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u"}`)
+	if err!=nil{t.Fatal(err)}
+	if !p.DisableDelaySSH{t.Fatal("legacy TCP_NODELAY default should be enabled")}
+}
