@@ -8,19 +8,27 @@ on:
       - "go.sum"
       - "mobile/**"
       - "internal/**"
+      - "app/**"
+      - "*.gradle.kts"
+      - "gradle.properties"
       - ".github/workflows/gomobile.yml"
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  bind:
+  android:
     runs-on: ubuntu-latest
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/30.0.16248370
+      GO_KEYSTORE_BASE64: ${{ secrets.GO_KEYSTORE_BASE64 }}
+      GO_KEYSTORE_PASSWORD: ${{ secrets.GO_KEYSTORE_PASSWORD }}
+      GO_KEY_ALIAS: ${{ secrets.GO_KEY_ALIAS }}
+      GO_KEY_PASSWORD: ${{ secrets.GO_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
@@ -39,16 +47,34 @@ jobs:
           set +o pipefail
           yes | "$SDKMANAGER" --licenses
           set -o pipefail
-          "$SDKMANAGER" --channel=3 --install "platforms;android-37.0" "build-tools;37.0.0" "ndk;30.0.16248370"
+          "$SDKMANAGER" --channel=3 --install "platforms;android-21" "platforms;android-37.0" "build-tools;37.0.0" "ndk;30.0.16248370"
           ln -sfn android-37.0 "$ANDROID_HOME/platforms/android-37"
       - name: Install gomobile
         run: go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20261011034528-197770444867
       - name: Initialize gomobile
         run: gomobile init
-      - name: Bind Go core
+      - name: Build consolidated Go AAR
         run: mkdir -p app/libs && gomobile bind -target=android -androidapi=21 -javapkg=dev.go.core -o app/libs/go-core.aar ./mobile
+      - name: Download official HEV AAR
+        run: |
+          curl -fL "https://github.com/heiher/hev-socks5-tunnel/releases/download/2.19.3/hev-socks5-tunnel.aar" -o app/libs/hev-socks5-tunnel.aar
+          echo "ab6c581e6157680cfe5687ee7bbdcf95405c006c2db3701879ec44b9e5f83836  app/libs/hev-socks5-tunnel.aar" | sha256sum --check
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.0"
+      - name: Prepare release signing
+        if: env.GO_KEYSTORE_BASE64 != ''
+        run: |
+          echo "$GO_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/go-release.keystore"
+          echo "GO_KEYSTORE_PATH=$RUNNER_TEMP/go-release.keystore" >> "$GITHUB_ENV"
+      - name: Build debug APK
+        run: gradle :app:assembleDebug
+      - name: Build release APK
+        run: gradle :app:copyGoReleaseApk
       - uses: actions/upload-artifact@v4
         with:
-          name: go-core-aar
-          path: app/libs/go-core.aar
+          name: Go-Android-APKs
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/go/Go-*.apk
           if-no-files-found: error
