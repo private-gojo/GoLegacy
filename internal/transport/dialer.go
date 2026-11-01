@@ -28,7 +28,7 @@ type Dialer struct {
 
 func(d *Dialer)Dial(p profile.Profile)(net.Conn,error){
 	if err:=p.Validate();err!=nil{return nil,err}
-	timeout:=p.ConnectTimeout;if timeout<=0{timeout=15*time.Second}
+	timeout:=time.Duration(p.ConnectTimeoutMs)*time.Millisecond
 	d.Base.Timeout=timeout
 	if d.Protect!=nil{d.Base.Control=func(_, _ string,raw syscall.RawConn)error{
 		var protectErr error
