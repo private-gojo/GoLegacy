@@ -74,8 +74,22 @@ class GoVpnService : VpnService() {
             }
             return
         }
+        val importedProfile = try { JSONObject(raw) } catch (e: Exception) {
+            if (generation == requestGeneration) {
+                broadcastStatus("error", "Invalid profile JSON")
+                stopTunnel(generation)
+            }
+            return
+        }
+        if (importedProfile.optBoolean("blockRoot", false) && isDeviceRooted()) {
+            if (generation == requestGeneration) {
+                broadcastStatus("error", "This locked profile does not allow rooted devices")
+                stopTunnel(generation)
+            }
+            return
+        }
         val expiry = try {
-            JSONObject(raw).optLong("expiryUnixMilli", 0L)
+            importedProfile.optLong("expiryUnixMilli", 0L)
         } catch (e: Exception) {
             if (generation == requestGeneration) {
                 broadcastStatus("error", "Invalid profile JSON")
@@ -228,6 +242,19 @@ class GoVpnService : VpnService() {
         }
         updateNotification("Go VPN connected")
         broadcastStatus("connected", "VPN connected")
+    }
+
+    private fun isDeviceRooted(): Boolean {
+        if ((Build.TAGS ?: "").contains("test-keys")) return true
+        val indicators = listOf(
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/sbin/su",
+            "/system/app/Superuser.apk",
+            "/data/adb/magisk",
+            "/sbin/.magisk"
+        )
+        return indicators.any { File(it).exists() }
     }
 
     private fun addIpv4RoutesExcluding(builder: Builder, cidrs: List<String>) {
