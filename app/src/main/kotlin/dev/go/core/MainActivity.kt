@@ -21,6 +21,7 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.ByteArrayOutputStream
 import dev.go.core.mobile.Bridge
 
@@ -42,12 +43,17 @@ class MainActivity : Activity() {
     private lateinit var keepAlive: EditText
     private lateinit var udpResolver: EditText
     private lateinit var dnsResolver: EditText
+    private lateinit var excludeIps: EditText
+    private lateinit var filterApps: EditText
     private lateinit var mode: Spinner
     private lateinit var acceptAnyStatus: CheckBox
     private lateinit var verifyTLS: CheckBox
     private lateinit var udpForward: CheckBox
     private lateinit var dnsForward: CheckBox
     private lateinit var disableDelaySSH: CheckBox
+    private lateinit var enableFilterApps: CheckBox
+    private lateinit var filterBypassMode: CheckBox
+    private lateinit var tetheringSubnet: CheckBox
     private lateinit var status: TextView
     private lateinit var exportButton: Button
     private var pendingProfile: String? = null
@@ -122,11 +128,16 @@ class MainActivity : Activity() {
         keepAlive = input("SSH keepalive seconds", "3")
         udpResolver = input("UDP gateway", "127.0.0.1:7300")
         dnsResolver = input("DNS resolver", "1.1.1.1")
+        excludeIps = multiInput("Excluded IPv4 addresses (comma or newline separated)")
+        filterApps = multiInput("App package names (one per line)")
         acceptAnyStatus = toggle("Accept any proxy status", true)
         verifyTLS = toggle("Verify TLS certificate", false)
         udpForward = toggle("UDP forwarding", true)
         dnsForward = toggle("DNS forwarding", true)
         disableDelaySSH = toggle("TCP_NODELAY", true)
+        enableFilterApps = toggle("Enable app filter", false)
+        filterBypassMode = toggle("Bypass listed apps", false)
+        tetheringSubnet = toggle("Allow tethering subnets outside VPN", false)
         status = label("Disconnected")
         fields.addView(status)
 
@@ -250,6 +261,11 @@ class MainActivity : Activity() {
             .put("udpResolver", udpResolver.text.toString().trim())
             .put("dnsForward", dnsForward.isChecked)
             .put("dnsResolver", dnsResolver.text.toString().trim())
+            .put("excludeIps", JSONArray(excludeIps.text.toString().split(Regex("[,\\s]+")).filter { it.isNotBlank() }))
+            .put("enableFilterApps", enableFilterApps.isChecked)
+            .put("filterBypassMode", filterBypassMode.isChecked)
+            .put("filterApps", JSONArray(filterApps.text.toString().split(Regex("[,\\s]+")).filter { it.isNotBlank() }))
+            .put("tetheringSubnet", tetheringSubnet.isChecked)
             .put("blockRoot", importedBlockRoot)
             .toString()
     }
@@ -303,6 +319,11 @@ class MainActivity : Activity() {
         keepAlive.setText(imported.optString("keepAliveSeconds", "3"))
         udpResolver.setText(imported.optString("udpResolver", "127.0.0.1:7300"))
         dnsResolver.setText(imported.optString("dnsResolver", "1.1.1.1"))
+        excludeIps.setText(jsonArrayLines(imported.optJSONArray("excludeIps")))
+        filterApps.setText(jsonArrayLines(imported.optJSONArray("filterApps")))
+        enableFilterApps.isChecked = imported.optBoolean("enableFilterApps", false)
+        filterBypassMode.isChecked = imported.optBoolean("filterBypassMode", false)
+        tetheringSubnet.isChecked = imported.optBoolean("tetheringSubnet", false)
         acceptAnyStatus.isChecked = imported.optBoolean("acceptAnyStatus", true)
         verifyTLS.isChecked = imported.optBoolean("verifyTls", false)
         udpForward.isChecked = imported.optBoolean("udpForward", true)
@@ -362,6 +383,11 @@ class MainActivity : Activity() {
         keepAlive.setText("3")
         udpResolver.setText("127.0.0.1:7300")
         dnsResolver.setText("1.1.1.1")
+        excludeIps.setText("")
+        filterApps.setText("")
+        enableFilterApps.isChecked = false
+        filterBypassMode.isChecked = false
+        tetheringSubnet.isChecked = false
         acceptAnyStatus.isChecked = true
         verifyTLS.isChecked = false
         udpForward.isChecked = true
@@ -460,6 +486,11 @@ class MainActivity : Activity() {
                 }
             }
             .show()
+    }
+
+    private fun jsonArrayLines(array: JSONArray?): String {
+        if (array == null) return ""
+        return (0 until array.length()).joinToString("\n") { array.optString(it) }
     }
 
     private fun startVpnService(profile: String) {
