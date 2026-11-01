@@ -22,6 +22,7 @@ const (
 
 type Profile struct {
 	Name string `json:"name,omitempty"`
+	LocalSocksPort uint16 `json:"localSocksPort,omitempty"`
 	Mode Mode `json:"mode"`
 	Host string `json:"host"`
 	Port uint16 `json:"port"`
@@ -52,6 +53,8 @@ func ParseJSON(raw string)(Profile,error){
 	var fields map[string]json.RawMessage
 	if err:=json.Unmarshal([]byte(raw),&fields);err!=nil{return p,err}
 	if p.Mode==""{p.Mode=ModeDirect}
+	if _,ok:=fields["localSocksPort"];!ok{p.LocalSocksPort=1080}
+	if p.LocalSocksPort==0{p.LocalSocksPort=1080}
 	if _,ok:=fields["acceptAnyStatus"];!ok{p.AcceptAnyStatus=true}
 	if _,ok:=fields["disableDelaySSH"];!ok{p.DisableDelaySSH=true}
 	if _,ok:=fields["udpForward"];!ok{p.UDPForward=true}
