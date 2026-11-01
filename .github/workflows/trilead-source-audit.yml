@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          upstream_dir="$RUNNER_TEMP/trilead213/trilead-ssh2-build213/src"
+          upstream_dir="$RUNNER_TEMP/trilead213/trilead-ssh2-build213/src/com/trilead/ssh2"
           local_dir="Legacy-Evolved/service/src/main/java/com/trilead/ssh2"
           output="$RUNNER_TEMP/trilead-build213-diff.txt"
           {
