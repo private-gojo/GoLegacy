@@ -2,6 +2,7 @@ package transport
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"net"
 	"strings"
