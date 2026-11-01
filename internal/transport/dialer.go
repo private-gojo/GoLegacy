@@ -74,7 +74,7 @@ func(d *Dialer)Dial(p profile.Profile)(net.Conn,error){
 		// TLS wraps the SSH endpoint directly; no HTTP CONNECT is sent.
 	case profile.ModePayloadSSL:
 		if p.Payload==""{
-			if err:=writeAndCheck(conn,defaultConnect(p.Host,p.Port),p.AcceptAnyStatus);err!=nil{return fail(err)}
+			if err:=writeAndCheck(conn,defaultConnect(p),p.AcceptAnyStatus);err!=nil{return fail(err)}
 		}else{
 			if err:=d.sendPayload(conn,p);err!=nil{return fail(err)}
 			if err:=readPayloadResponse(conn,p.AcceptAnyStatus);err!=nil{return fail(err)}
