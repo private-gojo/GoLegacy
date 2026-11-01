@@ -50,6 +50,7 @@ android {
 }
 
 dependencies {
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation(files("libs/go-core.aar"))
     implementation(files("libs/hev-socks5-tunnel.aar"))
 }
