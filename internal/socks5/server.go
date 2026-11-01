@@ -86,7 +86,7 @@ func(s *Server)handleUDPAssociate(control net.Conn,requestedHost string,requeste
 	udp,err:=net.ListenUDP("udp4",&net.UDPAddr{IP:net.IPv4(127,0,0,1)})
 	if err!=nil{_,_=control.Write([]byte{5,1,0,1,0,0,0,0,0,0});return}
 	id:=fmt.Sprintf("socks-udp-%d",atomic.AddUint64(&s.nextAssociation,1))
-	s.mu.Lock();s.udpConns[id]=udp;s.mu.Unlock()
+	s.mu.Lock();if s.udpConns==nil{s.udpConns=make(map[string]*net.UDPConn)};s.udpConns[id]=udp;s.mu.Unlock()
 	bound:=udp.LocalAddr().(*net.UDPAddr)
 	reply:=[]byte{5,0,0,1,127,0,0,1,0,0}
 	binary.BigEndian.PutUint16(reply[8:10],uint16(bound.Port))
