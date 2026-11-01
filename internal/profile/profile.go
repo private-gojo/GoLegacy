@@ -103,7 +103,9 @@ func(p Profile)Validate()error{
 		host,port,err:=net.SplitHostPort(p.UDPResolver);if err!=nil||host==""{return errors.New("invalid UDPGW resolver endpoint")}
 		n,e:=strconv.Atoi(port);if e!=nil||n<1||n>65535{return errors.New("invalid UDPGW resolver port")}
 	}
-	dnsIP := net.ParseIP(p.DNSResolver)
-	if dnsIP == nil || dnsIP.To4() == nil { return errors.New("DNS resolver must be an IPv4 address") }
+	if p.DNSResolver != "" {
+		dnsIP := net.ParseIP(p.DNSResolver)
+		if dnsIP == nil || dnsIP.To4() == nil { return errors.New("DNS resolver must be an IPv4 address") }
+	}
 	return nil
 }
