@@ -149,7 +149,7 @@ class GoVpnService : VpnService() {
             .setSession("Go")
             .setMtu(1500)
             .addAddress("198.18.0.1", 32)
-        builder.addDnsServer(dns)
+        builder.addDnsServer(InetAddress.getByName(dns))
         val excludedRoutes = mutableListOf("10.0.0.0/8")
         if (!dnsForward) excludedRoutes.add("$dns/32")
         if (Build.VERSION.SDK_INT >= 33) {
