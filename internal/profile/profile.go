@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type Mode string
@@ -54,7 +53,8 @@ type Profile struct {
 	TetheringSubnet bool `json:"tetheringSubnet"`
 	BlockRoot bool `json:"blockRoot,omitempty"`
 	AntiVpnSniffer bool `json:"antiVpnSniffer"`
-	ConnectTimeout time.Duration `json:"connectTimeout,omitempty"`
+	ConnectTimeoutMs int `json:"connectTimeoutMs"`
+	HandshakeTimeoutMs int `json:"handshakeTimeoutMs"`
 }
 
 func ParseJSON(raw string)(Profile,error){
@@ -64,6 +64,8 @@ func ParseJSON(raw string)(Profile,error){
 	var fields map[string]json.RawMessage
 	if err:=json.Unmarshal([]byte(raw),&fields);err!=nil{return p,err}
 	if p.Mode==""{p.Mode=ModeDirect}
+	if _,ok:=fields["connectTimeoutMs"];!ok{p.ConnectTimeoutMs=10000}
+	if _,ok:=fields["handshakeTimeoutMs"];!ok{p.HandshakeTimeoutMs=20000}
 	if _,ok:=fields["localSocksPort"];!ok{p.LocalSocksPort=1080}
 	if p.LocalSocksPort==0{p.LocalSocksPort=1080}
 	if _,ok:=fields["keepAliveSeconds"];!ok{p.KeepAliveSeconds=3}
@@ -112,6 +114,8 @@ func(p Profile)Validate()error{
 	if p.Password==""&&p.PrivateKey==""{return errors.New("SSH password or private key is required")}
 	if p.Mode==ModeProxy&&(p.ProxyHost==""||p.ProxyPort==0){return errors.New("proxy host and port are required for proxy mode")}
 	if p.KeepAliveSeconds<0||p.KeepAliveSeconds>3600{return errors.New("keepalive must be between 0 and 3600 seconds")}
+	if p.ConnectTimeoutMs<0||p.ConnectTimeoutMs>300000{return errors.New("connect timeout must be between 0 and 300000 milliseconds")}
+	if p.HandshakeTimeoutMs<0||p.HandshakeTimeoutMs>300000{return errors.New("SSH handshake timeout must be between 0 and 300000 milliseconds")}
 	if p.UDPForward || p.DNSForward {
 		host,port,err:=net.SplitHostPort(p.UDPResolver);if err!=nil||host==""{return errors.New("invalid UDPGW resolver endpoint")}
 		n,e:=strconv.Atoi(port);if e!=nil||n<1||n>65535{return errors.New("invalid UDPGW resolver port")}
