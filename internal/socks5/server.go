@@ -25,6 +25,7 @@ type Server struct {
 	UDP UDPForwarder
 	DNSForward bool
 	DNSResolver string
+	DNSPort uint16
 	UDPOnlyDNS bool
 	listener net.Listener
 	mu sync.Mutex
@@ -128,7 +129,7 @@ func(s *Server)udpLoop(id string,udp *net.UDPConn,requestedHost string,requested
 func(s *Server)forwardDNS(query []byte)([]byte,error){
 	if len(query)==0||len(query)>65535{return nil,errors.New("invalid DNS query length")}
 	if s.DNSResolver==""{return nil,errors.New("DNS resolver is not configured")}
-	conn,err:=s.Dial("tcp",net.JoinHostPort(s.DNSResolver,"53"))
+	port:=s.DNSPort;if port==0{port=53};conn,err:=s.Dial("tcp",net.JoinHostPort(s.DNSResolver,strconv.Itoa(int(port))))
 	if err!=nil{return nil,err}
 	defer conn.Close()
 	_=conn.SetDeadline(time.Now().Add(10*time.Second))
