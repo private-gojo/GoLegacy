@@ -606,7 +606,7 @@ class MainActivity : Activity() {
             val bitmap = Bitmap.createBitmap(900, 900, Bitmap.Config.ARGB_8888)
             for (x in 0 until 900) {
                 for (y in 0 until 900) {
-                    bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                    bitmap.setPixel(x, y, if (matrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
                 }
             }
             val image = ImageView(this).apply {
