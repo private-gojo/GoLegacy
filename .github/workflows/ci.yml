@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,3 +21,36 @@ jobs:
       - run: go mod download
       - run: go test ./...
       - run: go vet ./...
+
+  ssh-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.3"
+          cache: true
+      - name: Build OpenSSH and Dropbear test server
+        run: docker build -t golegacy-ssh-test -f integration/ssh/Dockerfile .
+      - name: Start SSH test servers
+        run: docker run -d --name golegacy-ssh-test -p 2222:22 -p 2223:2223 golegacy-ssh-test
+      - name: Wait for SSH servers
+        run: |
+          for port in 2222 2223; do
+            for attempt in $(seq 1 30); do
+              if timeout 1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            timeout 1 bash -c "</dev/tcp/127.0.0.1/$port"
+          done
+      - name: Test SSH protocol compatibility
+        env:
+          SSH_TEST_USERNAME: tunnel
+          SSH_TEST_PASSWORD: test-only-password
+          SSH_TEST_PORT: "2222"
+          DROPBEAR_TEST_PORT: "2223"
+        run: go test ./internal/sshclient -run TestSSHAgainstLegacyServerTypes -v
+      - if: always()
+        run: docker logs golegacy-ssh-test || true
+      - if: always()
+        run: docker rm -f golegacy-ssh-test || true

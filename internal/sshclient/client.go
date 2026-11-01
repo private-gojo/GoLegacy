@@ -69,6 +69,14 @@ func(c *Client)Dial(network,address string)(net.Conn,error){
 	return client.Dial(network,address)
 }
 
+func(c *Client)Exec(command string)([]byte,error){
+	c.mu.Lock();client:=c.client;c.mu.Unlock()
+	if client==nil{return nil,errors.New("SSH client is not connected")}
+	session,err:=client.NewSession();if err!=nil{return nil,err}
+	defer session.Close()
+	return session.CombinedOutput(command)
+}
+
 func(c *Client)Close()error{
 	c.mu.Lock();defer c.mu.Unlock()
 	if c.keepAliveStop!=nil{close(c.keepAliveStop);c.keepAliveStop=nil}
