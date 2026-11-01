@@ -1,0 +1,48 @@
+name: Legacy Binary Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pinned Legacy-Evolved baseline
+        uses: actions/checkout@v4
+        with:
+          repository: private-gojo/Legacy-Evolved
+          ref: 3d0b1838c0978051fb779a18bab37ac7a21e701f
+          path: Legacy-Evolved
+
+      - name: Inspect native libraries without execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y binutils file
+          output="$RUNNER_TEMP/legacy-native-audit.txt"
+          : > "$output"
+          while IFS= read -r -d '' so; do
+            {
+              echo "===== $so ====="
+              sha256sum "$so"
+              file "$so"
+              readelf -h "$so"
+              echo "--- NEEDED ---"
+              readelf -d "$so" | grep -E 'NEEDED|SONAME' || true
+              echo "--- RELEVANT STRINGS ---"
+              strings -a -n 5 "$so" | grep -Ei 'badvpn|udpgw|tun2socks|pdnsd|dns|version|socket|tunfd|socks-server|udpgw-remote' | head -n 120 || true
+              echo
+            } >> "$output"
+          done < <(find Legacy-Evolved/service/src/main/jniLibs -type f -name '*.so' -print0 | sort -z)
+          cat "$output"
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: Legacy-Native-Binary-Audit
+          path: ${{ runner.temp }}/legacy-native-audit.txt
+          if-no-files-found: error
