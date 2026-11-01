@@ -7,7 +7,9 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
 import android.net.IpPrefix
+import android.net.ConnectivityManager
 import java.net.InetAddress
+import java.net.Inet4Address
 import android.os.Build
 import android.os.Handler
 import android.os.Looper

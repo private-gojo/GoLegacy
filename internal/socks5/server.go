@@ -24,6 +24,7 @@ type Server struct {
 	Dial DialFunc
 	UDP UDPForwarder
 	DNSForward bool
+	UDPOnlyDNS bool
 	listener net.Listener
 	mu sync.Mutex
 	udpConns map[string]*net.UDPConn
@@ -112,6 +113,7 @@ func(s *Server)udpLoop(id string,udp *net.UDPConn,requestedHost string,requested
 		if !allowed{continue}
 		remote,payload,err:=parseUDPRequest(buf[:n]);if err!=nil{continue}
 		isDNS:=s.DNSForward&&remote.Port==53
+		if s.UDPOnlyDNS && !isDNS { continue }
 		replyFn:=func(data []byte){packet,e:=makeUDPResponse(remote,data);if e!=nil{return};_,_=udp.WriteToUDP(packet,target)}
 		_=s.UDP.Send(id,remote,payload,isDNS,replyFn)
 	}

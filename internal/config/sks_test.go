@@ -57,7 +57,7 @@ func TestImportSKSLockedMetadata(t *testing.T) {
 	encoded:=base64.StdEncoding.EncodeToString(salt)+"."+base64.StdEncoding.EncodeToString(nonce)+"."+base64.StdEncoding.EncodeToString(aead.Seal(nil,nonce,b.Bytes(),nil))
 	got,err:=ImportSKS([]byte(encoded),644,time.UnixMilli(1))
 	if err!=nil{t.Fatal(err)}
-	if !got.Locked||got.Message!="locked profile"||got.Profile.Host!="ssh.example.test"||got.Profile.LocalSocksPort!=1080||!got.Profile.UDPForward{t.Fatalf("unexpected import: %+v",got)}
+	if !got.Locked||got.Message!="locked profile"||got.Profile.Host!="ssh.example.test"||got.Profile.LocalSocksPort!=1080||got.Profile.KeepAliveSeconds!=3||!got.Profile.UDPForward{t.Fatalf("unexpected import: %+v",got)}
 }
 
 func TestImportSKSRejectsExpired(t *testing.T) {

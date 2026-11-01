@@ -106,6 +106,13 @@ func ImportSKS(raw []byte, appVersionCode int, now time.Time) (Imported, error) 
 
 	disableDelaySSH := true
 	if value, ok := props["disableDelaySSH"]; ok { disableDelaySSH = value == "1" }
+	keepAliveSeconds := 3
+	if value, ok := props["pingerSSH"]; ok && value != "" {
+		keepAliveSeconds, err = strconv.Atoi(value)
+		if err != nil || keepAliveSeconds < 0 || keepAliveSeconds > 3600 {
+			return result, errors.New("invalid SSH keepalive interval")
+		}
+	}
 	p := profile.Profile{
 		Name: props["profileName"], Mode: mode, Host: host, Port: port,
 		LocalSocksPort: uint16(localPort),
@@ -113,7 +120,7 @@ func ImportSKS(raw []byte, appVersionCode int, now time.Time) (Imported, error) 
 		ProxyHost: props["proxyRemoto"], ProxyPort: proxyPort,
 		SNI: props["sslSNI"], Payload: payloadText,
 		AcceptAnyStatus: true,
-		DisableDelaySSH: disableDelaySSH,
+		DisableDelaySSH: disableDelaySSH, KeepAliveSeconds: keepAliveSeconds,
 		UDPForward: props["udpForward"] == "1", UDPResolver: udpResolver,
 		DNSForward: props["dnsForward"] != "0", DNSResolver: dnsResolver,
 	}

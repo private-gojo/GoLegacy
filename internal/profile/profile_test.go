@@ -59,3 +59,32 @@ func TestSSHURIImportsLocalSocksPort(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if p.LocalSocksPort != 2080 { t.Fatalf("local SOCKS port=%d, want 2080", p.LocalSocksPort) }
 }
+
+func TestKeepAliveDefaultsToLegacyThreeSeconds(t *testing.T) {
+	p, err := ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u"}`)
+	if err != nil { t.Fatal(err) }
+	if p.KeepAliveSeconds != 3 { t.Fatalf("keepalive=%d, want 3", p.KeepAliveSeconds) }
+}
+
+func TestKeepAliveCanBeDisabledExplicitly(t *testing.T) {
+	p, err := ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","keepAliveSeconds":0}`)
+	if err != nil { t.Fatal(err) }
+	if p.KeepAliveSeconds != 0 { t.Fatalf("keepalive=%d, want 0", p.KeepAliveSeconds) }
+}
+
+func TestSSHURIUsesLegacyDefaults(t *testing.T) {
+	p, err := ParseURI("ssh://user:pass@ssh.example.test:22")
+	if err != nil { t.Fatal(err) }
+	if p.LocalSocksPort != 1080 || p.KeepAliveSeconds != 3 || !p.DisableDelaySSH || !p.UDPForward || !p.DNSForward {
+		t.Fatalf("legacy defaults not preserved: %+v", p)
+	}
+}
+
+func TestDNSOnlyForwardingRequiresUDPGWEndpoint(t *testing.T) {
+	p := Profile{
+		Mode: ModeDirect, Host: "ssh.example", Port: 22, Username: "u",
+		DNSForward: true, UDPForward: false, UDPResolver: "invalid",
+		DNSResolver: "1.1.1.1",
+	}
+	if err := p.Validate(); err == nil { t.Fatal("DNS-only forwarding accepted an invalid UDPGW endpoint") }
+}

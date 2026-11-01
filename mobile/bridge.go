@@ -45,9 +45,9 @@ func(b *Bridge)Connect(profileJSON string)error{
 	if protector!=nil{client.Protect=protector.Protect}
 	if err=client.Connect(p);err!=nil{return err}
 	var udpClient *udpgw.Client
-	if p.UDPForward{udpClient=udpgw.New(client,p.UDPResolver)}
+	if p.UDPForward || p.DNSForward { udpClient=udpgw.New(client,p.UDPResolver) }
 	if p.LocalSocksPort==0{p.LocalSocksPort=1080}
-	server:=&socks5.Server{Addr:net.JoinHostPort("127.0.0.1",strconv.Itoa(int(p.LocalSocksPort))),Dial:client.Dial,UDP:udpClient,DNSForward:p.DNSForward}
+	server:=&socks5.Server{Addr:net.JoinHostPort("127.0.0.1",strconv.Itoa(int(p.LocalSocksPort))),Dial:client.Dial,UDP:udpClient,DNSForward:p.DNSForward,UDPOnlyDNS:!p.UDPForward&&p.DNSForward}
 	if err=server.Start();err!=nil{if udpClient!=nil{_=udpClient.Close()};_=client.Close();return err}
 	b.mu.Lock();defer b.mu.Unlock()
 	if b.socks!=nil{_=b.socks.Close()}

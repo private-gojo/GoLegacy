@@ -52,7 +52,7 @@ func(c *Client)Connect(p profile.Profile)error{
 
 func keepAlive(client *ssh.Client,stop <-chan struct{},interval time.Duration){
 	t:=time.NewTicker(interval);defer t.Stop()
-	for{select{case<-stop:return;case<-t.C:_,_,_=client.SendRequest("keepalive@openssh.com",true,nil)}}
+	for{select{case<-stop:return;case<-t.C:_,_,_=client.SendRequest("trilead-ping",true,nil)}}
 }
 
 func hostKeyCallback(p profile.Profile)ssh.HostKeyCallback{
