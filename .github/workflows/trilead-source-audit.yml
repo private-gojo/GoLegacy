@@ -38,7 +38,7 @@ jobs:
           set -euo pipefail
           upstream_file="$(find "$RUNNER_TEMP/trilead213" -path '*/src/com/trilead/ssh2/Connection.java' -print -quit)"
           test -n "$upstream_file"
-          upstream_dir="$(dirname "$(dirname "$(dirname "$(dirname "$upstream_file")")")")"
+          upstream_dir="$(dirname "$upstream_file")"
           local_dir="Legacy-Evolved/service/src/main/java/com/trilead/ssh2"
           output="$RUNNER_TEMP/trilead-build213-diff.txt"
           {
