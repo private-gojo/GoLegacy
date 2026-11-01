@@ -97,3 +97,10 @@ func TestWriteAndCheckHandlesPartialWrites(t *testing.T) {
 	if err := writeAndCheck(c, request, false); err != nil { t.Fatal(err) }
 	if c.written != string(request) { t.Fatalf("written=%q", c.written) }
 }
+
+func TestDefaultConnectAddsBasicProxyAuthorization(t *testing.T) {
+	p := profile.Profile{Host:"ssh.example",Port:22,ProxyUsername:"proxy-user",ProxyPassword:"proxy-pass"}
+	got := string(defaultConnect(p))
+	want := "CONNECT ssh.example:22 HTTP/1.0\r\nProxy-Authorization: Basic cHJveHktdXNlcjpwcm94eS1wYXNz\r\n\r\n"
+	if got != want { t.Fatalf("request=%q want=%q", got, want) }
+}
