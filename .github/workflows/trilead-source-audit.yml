@@ -42,7 +42,13 @@ jobs:
           local_normalized="$RUNNER_TEMP/trilead-local-normalized"
           cp -a "$upstream_dir" "$upstream_normalized"
           cp -a "$local_dir" "$local_normalized"
-          find "$upstream_normalized" "$local_normalized" -type f -name '*.java' -exec sed -i 's/\\r$//' {} +
+          python3 - "$upstream_normalized" "$local_normalized" <<'PY'
+          import pathlib, sys
+          for root in map(pathlib.Path, sys.argv[1:]):
+              for source in root.rglob("*.java"):
+                  data = source.read_bytes().replace(b"\\r\\n", b"\\n").replace(b"\\r", b"\\n")
+                  source.write_bytes(data)
+          PY
           output="$RUNNER_TEMP/trilead-build213-diff.txt"
           {
             echo "Baseline commit: 3d0b1838c0978051fb779a18bab37ac7a21e701f"
