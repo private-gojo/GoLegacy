@@ -11,19 +11,32 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"dev.go.core/internal/payload"
 	"dev.go.core/internal/profile"
 )
 
-type Dialer struct { Base net.Dialer }
+type Dialer struct {
+	Base net.Dialer
+	Protect func(fd int) bool
+}
 
 func (d *Dialer) Dial(p profile.Profile) (net.Conn, error) {
 	if err := p.Validate(); err != nil { return nil, err }
 	timeout := p.ConnectTimeout
 	if timeout <= 0 { timeout = 15 * time.Second }
 	d.Base.Timeout = timeout
+	if d.Protect != nil {
+		d.Base.Control = func(_, _ string, raw syscall.RawConn) error {
+			var protectErr error
+			if err := raw.Control(func(fd uintptr) {
+				if !d.Protect(int(fd)) { protectErr = errors.New("VpnService.protect rejected socket") }
+			}); err != nil { return err }
+			return protectErr
+		}
+	}
 	address := net.JoinHostPort(p.Host, strconv.Itoa(int(p.Port)))
 	if p.Mode == profile.ModeProxy || p.Mode == profile.ModeSSL || p.Mode == profile.ModePayloadSSL {
 		address = net.JoinHostPort(p.ProxyHost, strconv.Itoa(int(p.ProxyPort)))

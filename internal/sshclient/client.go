@@ -20,10 +20,11 @@ type Client struct {
 	mu sync.Mutex
 	conn net.Conn
 	client *ssh.Client
+	Protect func(fd int) bool
 }
 
 func (c *Client) Connect(p profile.Profile) error {
-	d := &transport.Dialer{}
+	d := &transport.Dialer{Protect:c.Protect}
 	raw, err := d.Dial(p)
 	if err != nil { return err }
 	cfg := &ssh.ClientConfig{User:p.Username, Timeout:15*time.Second, HostKeyCallback:hostKeyCallback(p)}
@@ -39,6 +40,7 @@ func (c *Client) Connect(p profile.Profile) error {
 	if err != nil { _=raw.Close(); return fmt.Errorf("SSH handshake: %w",err) }
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.client!=nil { _=c.client.Close() }
 	c.conn=raw
 	c.client=ssh.NewClient(cc,chans,reqs)
 	return nil
