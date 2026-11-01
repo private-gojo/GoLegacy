@@ -2,10 +2,9 @@ package profile
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"encoding/base64"
 	"encoding/hex"
-	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
