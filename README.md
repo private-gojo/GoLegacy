@@ -1,11 +1,7 @@
-# GoLegacy
+# Go
 
-Standalone Android SSH tunneling client.
+Standalone Android SSH Tunneling client.
 
-- App name: Go
-- Android namespace: `dev.go.core`
-- Core language: Go
-- Android integration: Kotlin `VpnService`
-- Baseline behavior: `private-gojo/Legacy-Evolved` at `3d0b1838c0978051fb779a18bab37ac7a21e701f`
+> Written in Go. Owned by Go.
 
-This repository is being ported in parity-first phases. Features are not considered complete until their legacy behavior is covered by tests and the Android integration is validated in GitHub Actions. No owner-specific servers, login service, remote config, ads, or anti-tamper code are included.
+This project is being ported from the Legacy source code. Features are not considered complete until their legacy behavior is covered by tests and the Android integration is validated in GitHub Actions. No owner-specific servers, login service, remote config, ads, or anti-tamper code are included.
