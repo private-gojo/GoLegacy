@@ -63,7 +63,7 @@ func TestImportSKSLockedMetadata(t *testing.T) {
 func TestImportSKSRejectsExpired(t *testing.T) {
 	raw := encryptTestProperties(t, map[string]string{
 		"file.appVersionCode":"644","file.proteger":"1","file.validade":"1000","file.msg":"expired",
-		"sshServer":"ssh.example.test","sshPort":"22","sshUser":"account","sshPass":"secret",
+		"sshServer":"ssh.example.test","sshPort":"22","sshPortaLocal":"1080","sshUser":"account","sshPass":"secret",
 		"tunnelType":"sshDirect","usarDefaultPayload":"1","dnsForward":"1","dnsResolver":"1.1.1.1",
 		"udpForward":"0","udpResolver":"127.0.0.1:7300",
 	})
@@ -76,7 +76,7 @@ func encryptTestProperties(t *testing.T, props map[string]string) []byte {
 	t.Helper()
 	var b bytes.Buffer
 	b.WriteString(xml.Header+"<properties>")
-	for k, v := range props { b.WriteString("<entry key=\\""+k+"\\">"+v+"</entry>") }
+	for k, v := range props { b.WriteString("<entry key=\"" + k + "\">" + v + "</entry>") }
 	b.WriteString("</properties>")
 	salt := bytes.Repeat([]byte{7}, legacySaltBytes)
 	nonce := make([]byte, legacyGCMNonceBytes)
