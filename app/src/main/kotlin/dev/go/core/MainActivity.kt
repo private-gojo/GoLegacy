@@ -98,6 +98,10 @@ class MainActivity : Activity() {
             text = "Paste SSH URI"
             setOnClickListener { pasteSSHURI() }
         })
+        fields.addView(Button(this).apply {
+            text = "New profile"
+            setOnClickListener { resetProfile() }
+        })
 
         host = input("SSH host")
         port = input("SSH port", "22")
@@ -316,6 +320,34 @@ class MainActivity : Activity() {
         } catch (e: Exception) {
             status.text = "Import failed: ${e.message ?: "invalid .sks profile"}"
         }
+    }
+
+    private fun resetProfile() {
+        lockedProfileRaw = null
+        importedBlockRoot = false
+        hiddenProfileViews.forEach { it.visibility = android.view.View.VISIBLE }
+        mode.setSelection(0)
+        host.setText("")
+        port.setText("22")
+        username.setText("")
+        password.setText("")
+        privateKey.setText("")
+        passphrase.setText("")
+        proxyHost.setText("")
+        proxyPort.setText("")
+        sni.setText("")
+        payload.setText("")
+        tlsFingerprint.setText("")
+        hostKeyFingerprint.setText("")
+        keepAlive.setText("0")
+        udpResolver.setText("127.0.0.1:7300")
+        dnsResolver.setText("1.1.1.1")
+        acceptAnyStatus.isChecked = true
+        verifyTLS.isChecked = false
+        udpForward.isChecked = true
+        dnsForward.isChecked = true
+        disableDelaySSH.isChecked = true
+        status.text = "New profile"
     }
 
     private fun pasteSSHURI() {
