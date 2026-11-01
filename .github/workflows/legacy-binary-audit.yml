@@ -2,6 +2,9 @@ name: Legacy Binary Audit
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/legacy-binary-audit.yml
 
 permissions:
   contents: read
