@@ -116,6 +116,7 @@ func ImportSKS(raw []byte, appVersionCode int, now time.Time) (Imported, error) 
 		LocalSocksPort: uint16(localPort),
 		Username: username, Password: props["sshPass"],
 		ProxyHost: props["proxyRemoto"], ProxyPort: proxyPort,
+		ProxyUsername: props["proxyUser"], ProxyPassword: props["proxyPass"],
 		SNI: props["sslSNI"], Payload: payloadText,
 		AcceptAnyStatus: true,
 		DisableDelaySSH: disableDelaySSH, KeepAliveSeconds: keepAliveSeconds,
