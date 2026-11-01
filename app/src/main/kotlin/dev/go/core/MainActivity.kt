@@ -1,8 +1,11 @@
 package dev.go.core
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.IntentFilter
 import android.net.VpnService
@@ -75,6 +78,10 @@ class MainActivity : Activity() {
             text = "Import legacy .sks"
             setOnClickListener { chooseLegacyProfile() }
         })
+        fields.addView(Button(this).apply {
+            text = "Paste locked Go URI"
+            setOnClickListener { pasteLockedURI() }
+        })
 
         host = input("SSH host")
         port = input("SSH port", "22")
@@ -100,6 +107,10 @@ class MainActivity : Activity() {
         actions.addView(Button(this).apply {
             text = "Disconnect"
             setOnClickListener { disconnect() }
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        actions.addView(Button(this).apply {
+            text = "Export locked"
+            setOnClickListener { exportLockedURI() }
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(actions)
         setContentView(root)
@@ -150,14 +161,14 @@ class MainActivity : Activity() {
         setPadding(0, 12, 0, 0)
     }
 
-    private fun connect() {
+    private fun buildProfileJson(): String {
         val selectedMode = when (mode.selectedItemPosition) {
             1 -> "proxy"
             2 -> "ssl"
             3 -> "payload+ssl"
             else -> "direct"
         }
-        val profile = JSONObject()
+        return JSONObject()
             .put("mode", selectedMode)
             .put("host", host.text.toString().trim())
             .put("port", port.text.toString().toIntOrNull() ?: 22)
@@ -172,9 +183,12 @@ class MainActivity : Activity() {
             .put("udpResolver", udpResolver.text.toString().trim())
             .put("dnsForward", true)
             .put("dnsResolver", dnsResolver.text.toString().trim())
+            .put("blockRoot", importedBlockRoot)
             .toString()
+    }
 
-        val profileJson = lockedProfileRaw ?: profile
+    private fun connect() {
+        val profileJson = lockedProfileRaw ?: buildProfileJson()
         pendingProfile = profileJson
         val permission = VpnService.prepare(this)
         if (permission != null) {
@@ -191,44 +205,123 @@ class MainActivity : Activity() {
         startActivityForResult(intent, LEGACY_PROFILE_REQUEST)
     }
 
+    private fun applyImportedConfig(result: JSONObject) {
+        val imported = result.getJSONObject("profile")
+        lockedProfileRaw = null
+        importedBlockRoot = result.optBoolean("blockRoot")
+        imported.put("blockRoot", importedBlockRoot)
+        mode.setSelection(
+            when (imported.optString("mode")) {
+                "proxy" -> 1
+                "ssl" -> 2
+                "payload+ssl" -> 3
+                else -> 0
+            }
+        )
+        host.setText(imported.optString("host"))
+        port.setText(imported.optString("port", "22"))
+        username.setText(imported.optString("username"))
+        password.setText(imported.optString("password"))
+        proxyHost.setText(imported.optString("proxyHost"))
+        proxyPort.setText(imported.optString("proxyPort"))
+        sni.setText(imported.optString("sni"))
+        payload.setText(imported.optString("payload"))
+        udpResolver.setText(imported.optString("udpResolver", "127.0.0.1:7300"))
+        dnsResolver.setText(imported.optString("dnsResolver", "1.1.1.1"))
+
+        if (result.optBoolean("locked")) {
+            lockedProfileRaw = imported.toString()
+            hiddenProfileViews.forEach { it.visibility = android.view.View.GONE }
+            status.text = result.optString("message").ifBlank { "Locked profile imported" }
+        } else {
+            hiddenProfileViews.forEach { it.visibility = android.view.View.VISIBLE }
+            status.text = "Profile imported"
+        }
+    }
+
     private fun importLegacyProfile(uri: android.net.Uri) {
         try {
             val raw = contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 ?: error("Unable to read selected profile")
-            val result = JSONObject(importBridge.importSKS(raw, 644L, System.currentTimeMillis()))
-            val imported = result.getJSONObject("profile")
-            lockedProfileRaw = null
-            mode.setSelection(
-                when (imported.optString("mode")) {
-                    "proxy" -> 1
-                    "ssl" -> 2
-                    "payload+ssl" -> 3
-                    else -> 0
-                }
-            )
-            host.setText(imported.optString("host"))
-            port.setText(imported.optString("port", "22"))
-            username.setText(imported.optString("username"))
-            password.setText(imported.optString("password"))
-            proxyHost.setText(imported.optString("proxyHost"))
-            proxyPort.setText(imported.optString("proxyPort"))
-            sni.setText(imported.optString("sni"))
-            payload.setText(imported.optString("payload"))
-            udpResolver.setText(imported.optString("udpResolver", "127.0.0.1:7300"))
-            dnsResolver.setText(imported.optString("dnsResolver", "1.1.1.1"))
-
-            if (result.optBoolean("locked")) {
-                imported.put("blockRoot", result.optBoolean("blockRoot"))
-                lockedProfileRaw = imported.toString()
-                hiddenProfileViews.forEach { it.visibility = android.view.View.GONE }
-                status.text = result.optString("message").ifBlank { "Locked profile imported" }
-            } else {
-                hiddenProfileViews.forEach { it.visibility = android.view.View.VISIBLE }
-                status.text = "Legacy profile imported"
-            }
+            applyImportedConfig(JSONObject(importBridge.importSKS(raw, 644L, System.currentTimeMillis())))
         } catch (e: Exception) {
             status.text = "Import failed: ${e.message ?: "invalid .sks profile"}"
         }
+    }
+
+    private fun pasteLockedURI() {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        val uri = clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()?.trim()
+        if (uri.isNullOrBlank() || !uri.startsWith("go-ssh://locked/")) {
+            status.text = "Clipboard does not contain a locked Go URI"
+            return
+        }
+        val passcode = EditText(this).apply {
+            hint = "Passcode (leave blank if none)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Import locked profile")
+            .setView(passcode)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Import") { _, _ ->
+                try {
+                    val result = JSONObject(
+                        importBridge.importLockedURI(uri, passcode.text.toString(), System.currentTimeMillis())
+                    )
+                    applyImportedConfig(result)
+                } catch (e: Exception) {
+                    status.text = "Import failed: ${e.message ?: "invalid locked URI"}"
+                }
+            }
+            .show()
+    }
+
+    private fun exportLockedURI() {
+        val passcode = EditText(this).apply {
+            hint = "Optional passcode"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val message = EditText(this).apply { hint = "Config message (optional)" }
+        val expiry = EditText(this).apply {
+            hint = "Expiry Unix milliseconds (0 = no expiry)"
+            setText("0")
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        val dialogFields = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(message)
+            addView(expiry)
+            addView(passcode)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Export locked Go profile")
+            .setView(dialogFields)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Export") { _, _ ->
+                try {
+                    val expiryValue = expiry.text.toString().toLongOrNull() ?: 0L
+                    val uri = importBridge.exportLockedURI(
+                        lockedProfileRaw ?: buildProfileJson(),
+                        expiryValue,
+                        message.text.toString(),
+                        importedBlockRoot,
+                        passcode.text.toString()
+                    )
+                    val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Go locked profile", uri))
+                    status.text = if (passcode.text.isNullOrEmpty()) {
+                        "Locked URI copied; fields are hidden in the app but data is not encrypted"
+                    } else {
+                        "Encrypted locked URI copied"
+                    }
+                } catch (e: Exception) {
+                    status.text = "Export failed: ${e.message ?: "invalid profile"}"
+                }
+            }
+            .show()
     }
 
     private fun startVpnService(profile: String) {
