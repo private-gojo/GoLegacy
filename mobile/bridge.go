@@ -62,6 +62,14 @@ func(b *Bridge)Close()error{
 
 
 
+func (b *Bridge) ParseSSHURI(uri string) (string, error) {
+	p, err := profile.ParseURI(uri)
+	if err != nil { return "", err }
+	encoded, err := json.Marshal(p)
+	if err != nil { return "", err }
+	return string(encoded), nil
+}
+
 func (b *Bridge) ImportLockedURI(uri, passcode string, nowUnixMilli int64) (string, error) {
 	imported, err := config.DecodeLockedURI(uri, passcode, time.UnixMilli(nowUnixMilli))
 	if err != nil { return "", err }
