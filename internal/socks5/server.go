@@ -27,7 +27,11 @@ type Server struct {
 	DNSResolver string
 	DNSPort uint16
 	UDPOnlyDNS bool
+	MaxConnections int
 	listener net.Listener
+	sem chan struct{}
+	stop chan struct{}
+	closeOnce sync.Once
 	mu sync.Mutex
 	udpConns map[string]*net.UDPConn
 	nextAssociation uint64
@@ -36,8 +40,19 @@ type Server struct {
 func(s *Server)Start()error{
 	if s.Dial==nil{return errors.New("SOCKS5 dial function is required")}
 	ln,err:=net.Listen("tcp",s.Addr);if err!=nil{return err}
+	maxConnections:=s.MaxConnections
+	if maxConnections<2{maxConnections=25}
 	s.listener=ln;s.udpConns=make(map[string]*net.UDPConn)
-	go func(){for{c,e:=ln.Accept();if e!=nil{return};go s.handle(c)}}()
+	s.sem=make(chan struct{},maxConnections);s.stop=make(chan struct{})
+	go func(){for{
+		c,e:=ln.Accept();if e!=nil{return}
+		select{
+		case s.sem<-struct{}{}:
+			go func(conn net.Conn){defer func(){<-s.sem}();s.handle(conn)}(c)
+		case <-s.stop:
+			_=c.Close();return
+		}
+	}}()
 	return nil
 }
 
@@ -45,6 +60,7 @@ func(s *Server)AddrString()string{if s.listener==nil{return ""};return s.listene
 
 func(s *Server)Close()error{
 	var err error
+	if s.stop!=nil{s.closeOnce.Do(func(){close(s.stop)})}
 	if s.listener!=nil{err=s.listener.Close()}
 	s.mu.Lock()
 	for id,conn:=range s.udpConns{_=conn.Close();if s.UDP!=nil{s.UDP.CloseAssociation(id)};delete(s.udpConns,id)}
