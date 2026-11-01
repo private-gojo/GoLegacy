@@ -25,7 +25,8 @@ SSH password and private-key authentication are supported. Legacy Trilead client
 - Optional tethering subnet bypass.
 - TCP and UDP forwarding through the local SOCKS5 endpoint.
 - BadVPN UDPGW framing over the SSH connection.
-- DNS and UDP forwarding settings compatible with the legacy profile defaults.
+- DNS forwarding uses TCP to the configured resolver over SSH, matching the legacy `pdnsd` `tcp_only` mode.
+- Non-DNS UDP forwarding uses BadVPN UDPGW over SSH.
 - Reconnect loop with exponential backoff.
 - Android `VpnService.protect()` callback for tunnel sockets.
 
