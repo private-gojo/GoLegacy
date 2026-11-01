@@ -15,6 +15,7 @@ func TestSSHAgainstLegacyServerTypes(t *testing.T) {
 	servers:=[]struct{name,portEnv string}{
 		{name:"OpenSSH",portEnv:"SSH_TEST_PORT"},
 		{name:"Dropbear",portEnv:"DROPBEAR_TEST_PORT"},
+		{name:"LegacyAlgorithms",portEnv:"LEGACY_SSH_TEST_PORT"},
 	}
 	for _,server:=range servers{
 		t.Run(server.name,func(t *testing.T){

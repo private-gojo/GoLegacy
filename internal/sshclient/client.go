@@ -29,7 +29,20 @@ type Client struct {
 func(c *Client)Connect(p profile.Profile)error{
 	d:=&transport.Dialer{Protect:c.Protect,Formatter:c.Formatter}
 	raw,err:=d.Dial(p);if err!=nil{return err}
-	cfg:=&ssh.ClientConfig{Config:ssh.Config{},User:p.Username,Timeout:15*time.Second,ClientVersion:"SSH-2.0-TrileadSSH2Java_213",HostKeyCallback:hostKeyCallback(p)}
+	supported := ssh.SupportedAlgorithms()
+	sshConfig := ssh.Config{
+		KeyExchanges: append(supported.KeyExchanges,
+			ssh.InsecureKeyExchangeDHGEXSHA1,
+			ssh.InsecureKeyExchangeDH14SHA1,
+			ssh.InsecureKeyExchangeDH1SHA1,
+		),
+		Ciphers: append(supported.Ciphers,
+			ssh.InsecureCipherAES128CBC,
+			ssh.InsecureCipherTripleDESCBC,
+		),
+		MACs: append(supported.MACs, ssh.InsecureHMACSHA196),
+	}
+	cfg:=&ssh.ClientConfig{Config:sshConfig,User:p.Username,Timeout:15*time.Second,ClientVersion:"SSH-2.0-TrileadSSH2Java_213",HostKeyCallback:hostKeyCallback(p)}
 	if p.Password!=""{cfg.Auth=append(cfg.Auth,ssh.Password(p.Password))}
 	if p.PrivateKey!=""{
 		var signer ssh.Signer

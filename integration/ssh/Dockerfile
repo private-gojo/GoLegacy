@@ -20,8 +20,23 @@ RUN printf '%s\n' \
     'KbdInteractiveAuthentication no' \
     'UsePAM no' \
     'PermitRootLogin no' \
-    'AllowUsers tunnel' >> /etc/ssh/sshd_config
+    'AllowUsers tunnel' >> /etc/ssh/sshd_config \
+    && printf '%s\n' \
+    'Port 2224' \
+    'ListenAddress 0.0.0.0' \
+    'PidFile /run/sshd_legacy.pid' \
+    'HostKey /etc/ssh/ssh_host_rsa_key' \
+    'PasswordAuthentication yes' \
+    'KbdInteractiveAuthentication no' \
+    'UsePAM no' \
+    'PermitRootLogin no' \
+    'AllowUsers tunnel' \
+    'KexAlgorithms diffie-hellman-group1-sha1' \
+    'HostKeyAlgorithms ssh-rsa' \
+    'Ciphers aes128-cbc' \
+    'MACs hmac-sha1-96' > /etc/ssh/sshd_legacy_config \
+    && /usr/sbin/sshd -t -f /etc/ssh/sshd_legacy_config
 
-EXPOSE 22 2223
+EXPOSE 22 2223 2224
 
-CMD ["/bin/sh", "-c", "/usr/sbin/sshd -D -e & /usr/sbin/dropbear -F -E -p 2223 & /usr/local/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --loglevel info & exec python3 -c 'import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.bind((\"127.0.0.1\",9999)); exec(\"while True:\\n d,a=s.recvfrom(65535)\\n s.sendto(d,a)\")'"]
+CMD ["/bin/sh", "-c", "/usr/sbin/sshd -D -e & /usr/sbin/sshd -D -e -f /etc/ssh/sshd_legacy_config & /usr/sbin/dropbear -F -E -p 2223 & /usr/local/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --loglevel info & exec python3 -c 'import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.bind((\"127.0.0.1\",9999)); exec(\"while True:\\n d,a=s.recvfrom(65535)\\n s.sendto(d,a)\")'"]
