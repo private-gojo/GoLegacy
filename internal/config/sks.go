@@ -104,13 +104,15 @@ func ImportSKS(raw []byte, appVersionCode int, now time.Time) (Imported, error) 
 	udpResolver := props["udpResolver"]
 	if udpResolver == "" { udpResolver = "127.0.0.1:7300" }
 
+	disableDelaySSH := true
+	if value, ok := props["disableDelaySSH"]; ok { disableDelaySSH = value == "1" }
 	p := profile.Profile{
 		Name: props["profileName"], Mode: mode, Host: host, Port: port,
 		Username: username, Password: props["sshPass"],
 		ProxyHost: props["proxyRemoto"], ProxyPort: proxyPort,
 		SNI: props["sslSNI"], Payload: payloadText,
 		AcceptAnyStatus: true,
-		DisableDelaySSH: props["disableDelaySSH"] == "1",
+		DisableDelaySSH: disableDelaySSH,
 		UDPForward: props["udpForward"] == "1", UDPResolver: udpResolver,
 		DNSForward: props["dnsForward"] != "0", DNSResolver: dnsResolver,
 	}
