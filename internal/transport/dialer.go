@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -66,7 +67,7 @@ func(d *Dialer)Dial(p profile.Profile)(net.Conn,error){
 		if p.Payload!=""{if err:=d.sendPayload(conn,p);err!=nil{return fail(err)}}
 	case profile.ModeProxy:
 		if p.Payload!=""{if err:=d.sendPayload(conn,p);err!=nil{return fail(err)}}else{
-			if err:=writeAndCheck(conn,defaultConnect(p.Host,p.Port),p.AcceptAnyStatus);err!=nil{return fail(err)}
+			if err:=writeAndCheck(conn,defaultConnect(p),p.AcceptAnyStatus);err!=nil{return fail(err)}
 		}
 		if p.Payload!=""{if err:=readPayloadResponse(conn,p.AcceptAnyStatus);err!=nil{return fail(err)}}
 	case profile.ModeSSL:
@@ -94,8 +95,19 @@ func(d *Dialer)sendPayload(conn net.Conn,p profile.Profile)error{
 	return writeFull(conn, payload.EncodeLatin1(string(data)))
 }
 
-func defaultConnect(host string,port uint16)[]byte{
-	return []byte("CONNECT "+host+":"+strconv.Itoa(int(port))+" HTTP/1.0\r\n\r\n")
+func defaultConnect(p profile.Profile)[]byte{
+	var request strings.Builder
+	request.WriteString("CONNECT ")
+	request.WriteString(net.JoinHostPort(p.Host,strconv.Itoa(int(p.Port))))
+	request.WriteString(" HTTP/1.0\r\n")
+	if p.ProxyUsername!="" || p.ProxyPassword!="" {
+		credentials:=payload.EncodeLatin1(p.ProxyUsername+":"+p.ProxyPassword)
+		request.WriteString("Proxy-Authorization: Basic ")
+		request.WriteString(base64.StdEncoding.EncodeToString(credentials))
+		request.WriteString("\r\n")
+	}
+	request.WriteString("\r\n")
+	return []byte(request.String())
 }
 
 func writeAndCheck(conn net.Conn,data []byte,acceptAny bool)error{
