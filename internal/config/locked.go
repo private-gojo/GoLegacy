@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/argon2"
 
@@ -44,6 +45,7 @@ type LockedConfig struct {
 
 func EncodeLockedURI(config LockedConfig, passcode string) (string, error) {
 	if err := config.Profile.Validate(); err != nil { return "", err }
+	if config.ExpiryUnixMilli < 0 { return "", errors.New("invalid locked profile expiry") }
 	config.Locked = true
 	plain, err := json.Marshal(config)
 	if err != nil { return "", err }
@@ -53,7 +55,7 @@ func EncodeLockedURI(config LockedConfig, passcode string) (string, error) {
 	salt, nonce := []byte(nil), []byte(nil)
 	payloadLength := len(plain)
 	if passcode != "" {
-		if len(passcode) < 8 { return "", errors.New("passcode must contain at least 8 characters") }
+		if utf8.RuneCountInString(passcode) < 8 { return "", errors.New("passcode must contain at least 8 characters") }
 		flags, kdf, cipherID = lockedFlagEncrypted, lockedKDFArgon2id, lockedCipherAESGCM
 		salt = make([]byte, lockedSaltSize)
 		nonce = make([]byte, lockedNonceSize)

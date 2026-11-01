@@ -42,3 +42,22 @@ func TestLockedURIPlaintextMode(t *testing.T) {
 	got,err:=DecodeLockedURI(uri,"",time.Now())
 	if err!=nil||!got.Locked{t.Fatalf("got=%+v err=%v",got,err)}
 }
+
+func TestLockedURIRejectsNegativeExpiry(t *testing.T) {
+	cfg := LockedConfig{
+		Profile: profile.Profile{Mode: profile.ModeDirect, Host: "ssh.example.test", Port: 22, Username: "user"},
+		ExpiryUnixMilli: -1,
+	}
+	if _, err := EncodeLockedURI(cfg, ""); err == nil {
+		t.Fatal("negative expiry accepted")
+	}
+}
+
+func TestLockedURIPasscodeLengthUsesCharacters(t *testing.T) {
+	cfg := LockedConfig{
+		Profile: profile.Profile{Mode: profile.ModeDirect, Host: "ssh.example.test", Port: 22, Username: "user"},
+	}
+	if _, err := EncodeLockedURI(cfg, "éééé"); err == nil {
+		t.Fatal("four Unicode characters should not satisfy the eight-character minimum")
+	}
+}
