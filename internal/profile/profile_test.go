@@ -1,38 +1,38 @@
 package profile
 
-import "testing"
+import ("testing"; "strings")
 
 func TestAcceptAnyStatusDefaultsTrue(t *testing.T){
-	p,err:=ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u"}`)
+	p,err:=ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","password":"p"}`)
 	if err!=nil{t.Fatal(err)}
 	if !p.AcceptAnyStatus{t.Fatal("acceptAnyStatus should default true")}
 }
 
 func TestAcceptAnyStatusCanBeDisabled(t *testing.T){
-	p,err:=ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","acceptAnyStatus":false}`)
+	p,err:=ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","password":"p","acceptAnyStatus":false}`)
 	if err!=nil{t.Fatal(err)}
 	if p.AcceptAnyStatus{t.Fatal("explicit false ignored")}
 }
 
 func TestUDPAndDNSDefaultsMatchLegacy(t *testing.T){
-	p,err:=ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u"}`)
+	p,err:=ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","password":"p"}`)
 	if err!=nil{t.Fatal(err)}
 	if !p.UDPForward||p.UDPResolver!="127.0.0.1:7300"{t.Fatalf("UDP defaults: enabled=%v resolver=%q",p.UDPForward,p.UDPResolver)}
 	if !p.DNSForward||p.DNSResolver!="1.1.1.1"{t.Fatalf("DNS defaults: enabled=%v resolver=%q",p.DNSForward,p.DNSResolver)}
 }
 
 func TestSSLModeDoesNotRequireProxy(t *testing.T){
-	p:=Profile{Mode:ModeSSL,Host:"ssh.example",Port:443,Username:"u"}
+	p:=Profile{Mode:ModeSSL,Host:"ssh.example",Port:443,Username:"u",Password:"p"}
 	if err:=p.Validate();err!=nil{t.Fatal(err)}
 }
 
 func TestPayloadSSLModeDoesNotRequireProxy(t *testing.T){
-	p:=Profile{Mode:ModePayloadSSL,Host:"ssh.example",Port:443,Username:"u"}
+	p:=Profile{Mode:ModePayloadSSL,Host:"ssh.example",Port:443,Username:"u",Password:"p",Payload:"CONNECT [host_port] [protocol][crlf][crlf]"}
 	if err:=p.Validate();err!=nil{t.Fatal(err)}
 }
 
 func TestProxyModeRequiresProxyEndpoint(t *testing.T){
-	p:=Profile{Mode:ModeProxy,Host:"ssh.example",Port:22,Username:"u"}
+	p:=Profile{Mode:ModeProxy,Host:"ssh.example",Port:22,Username:"u",Password:"p"}
 	if err:=p.Validate();err==nil{t.Fatal("expected proxy endpoint validation")}
 }
 
@@ -43,13 +43,13 @@ func TestSSHURIImport(t *testing.T) {
 }
 
 func TestJSONDefaultsTCPNoDelayToLegacySetting(t *testing.T) {
-	p,err:=ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u"}`)
+	p,err:=ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","password":"p"}`)
 	if err!=nil{t.Fatal(err)}
 	if !p.DisableDelaySSH{t.Fatal("legacy TCP_NODELAY default should be enabled")}
 }
 
 func TestLocalSocksPortDefaultsToLegacy(t *testing.T) {
-	p, err := ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u"}`)
+	p, err := ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","password":"p"}`)
 	if err != nil { t.Fatal(err) }
 	if p.LocalSocksPort != 1080 { t.Fatalf("local SOCKS port=%d, want 1080", p.LocalSocksPort) }
 }
@@ -61,13 +61,13 @@ func TestSSHURIImportsLocalSocksPort(t *testing.T) {
 }
 
 func TestKeepAliveDefaultsToLegacyThreeSeconds(t *testing.T) {
-	p, err := ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u"}`)
+	p, err := ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","password":"p"}`)
 	if err != nil { t.Fatal(err) }
 	if p.KeepAliveSeconds != 3 { t.Fatalf("keepalive=%d, want 3", p.KeepAliveSeconds) }
 }
 
 func TestKeepAliveCanBeDisabledExplicitly(t *testing.T) {
-	p, err := ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","keepAliveSeconds":0}`)
+	p, err := ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","password":"p","keepAliveSeconds":0}`)
 	if err != nil { t.Fatal(err) }
 	if p.KeepAliveSeconds != 0 { t.Fatalf("keepalive=%d, want 0", p.KeepAliveSeconds) }
 }
@@ -83,8 +83,28 @@ func TestSSHURIUsesLegacyDefaults(t *testing.T) {
 func TestDNSOnlyForwardingRequiresUDPGWEndpoint(t *testing.T) {
 	p := Profile{
 		Mode: ModeDirect, Host: "ssh.example", Port: 22, Username: "u",
-		DNSForward: true, UDPForward: false, UDPResolver: "invalid",
+		Password: "p", DNSForward: true, UDPForward: false, UDPResolver: "invalid",
 		DNSResolver: "1.1.1.1",
 	}
 	if err := p.Validate(); err == nil { t.Fatal("DNS-only forwarding accepted an invalid UDPGW endpoint") }
+}
+
+func TestProfileRequiresAuthentication(t *testing.T) {
+	p := Profile{Mode: ModeDirect, Host: "ssh.example", Port: 22, Username: "u"}
+	if err := p.Validate(); err == nil { t.Fatal("profile without SSH authentication was accepted") }
+}
+
+func TestProfileRejectsInvalidTLSFingerprint(t *testing.T) {
+	p := Profile{Mode: ModeDirect, Host: "ssh.example", Port: 22, Username: "u", Password: "p", TLSFingerprint: "not-a-fingerprint"}
+	if err := p.Validate(); err == nil { t.Fatal("invalid TLS fingerprint was accepted") }
+}
+
+func TestProfileRejectsInvalidHostKeyFingerprint(t *testing.T) {
+	p := Profile{Mode: ModeDirect, Host: "ssh.example", Port: 22, Username: "u", Password: "p", HostKeySHA256: "SHA256:invalid"}
+	if err := p.Validate(); err == nil { t.Fatal("invalid SSH host-key fingerprint was accepted") }
+}
+
+func TestProfileJSONSizeLimit(t *testing.T) {
+	raw := strings.Repeat("x", (1<<20)+1)
+	if _, err := ParseJSON(raw); err == nil { t.Fatal("oversized profile JSON was accepted") }
 }

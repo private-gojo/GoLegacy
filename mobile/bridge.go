@@ -34,12 +34,14 @@ func NewBridge()*Bridge{return &Bridge{formatter:payload.NewFormatter()}}
 func(b *Bridge)SetSocketProtector(p SocketProtector){b.mu.Lock();defer b.mu.Unlock();b.protector=p}
 
 func (b *Bridge) ValidateProfile(profileJSON string) error {
-	_, err := profile.ParseJSON(profileJSON)
-	return err
+	p, err := profile.ParseJSON(profileJSON)
+	if err != nil { return err }
+	return sshclient.ValidateProfile(p)
 }
 
 func(b *Bridge)Connect(profileJSON string)error{
 	p,err:=profile.ParseJSON(profileJSON);if err!=nil{return err}
+	if err=sshclient.ValidateProfile(p);err!=nil{return err}
 	b.mu.Lock();protector:=b.protector;formatter:=b.formatter;b.mu.Unlock()
 	client:=&sshclient.Client{Formatter:formatter}
 	if protector!=nil{client.Protect=protector.Protect}

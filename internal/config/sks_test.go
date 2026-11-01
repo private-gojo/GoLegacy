@@ -87,3 +87,10 @@ func encryptTestProperties(t *testing.T, props map[string]string) []byte {
 	encoded := base64.StdEncoding.EncodeToString(salt)+"."+base64.StdEncoding.EncodeToString(nonce)+"."+base64.StdEncoding.EncodeToString(aead.Seal(nil, nonce, b.Bytes(), nil))
 	return []byte(encoded)
 }
+
+func TestImportSKSSizeLimit(t *testing.T) {
+	raw := make([]byte, (1<<20)+1)
+	if _, err := ImportSKS(raw, 644, time.Now()); err == nil {
+		t.Fatal("oversized .sks profile was accepted")
+	}
+}

@@ -49,6 +49,7 @@ type propertyEntry struct {
 
 func ImportSKS(raw []byte, appVersionCode int, now time.Time) (Imported, error) {
 	var result Imported
+	if len(raw) > 1<<20 { return result, errors.New(".sks profile exceeds 1 MiB") }
 	plain, format, err := decryptLegacy(raw)
 	if err != nil { return result, fmt.Errorf("decrypt .sks: %w", err) }
 	var document propertiesDocument

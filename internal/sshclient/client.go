@@ -26,7 +26,19 @@ type Client struct {
 	keepAliveStop chan struct{}
 }
 
+func ValidateProfile(p profile.Profile) error {
+	if err := p.Validate(); err != nil { return err }
+	if p.PrivateKey == "" { return nil }
+	if p.Passphrase != "" {
+		_, err := ssh.ParsePrivateKeyWithPassphrase([]byte(p.PrivateKey), []byte(p.Passphrase))
+		return err
+	}
+	_, err := ssh.ParsePrivateKey([]byte(p.PrivateKey))
+	return err
+}
+
 func(c *Client)Connect(p profile.Profile)error{
+	if err := ValidateProfile(p); err != nil { return err }
 	d:=&transport.Dialer{Protect:c.Protect,Formatter:c.Formatter}
 	raw,err:=d.Dial(p);if err!=nil{return err}
 	supported := ssh.SupportedAlgorithms()

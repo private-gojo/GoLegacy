@@ -22,21 +22,21 @@ func TestLockedURIEncryptedRoundTrip(t *testing.T) {
 }
 
 func TestLockedURIDoesNotAcceptWrongPasscode(t *testing.T) {
-	cfg:=LockedConfig{Profile:profile.Profile{Mode:profile.ModeDirect,Host:"ssh.example.test",Port:22,Username:"user"}}
+	cfg:=LockedConfig{Profile:profile.Profile{Mode:profile.ModeDirect,Host:"ssh.example.test",Port:22,Username:"user",Password:"secret"}}
 	uri,err:=EncodeLockedURI(cfg,"correctpass")
 	if err!=nil{t.Fatal(err)}
 	if _,err=DecodeLockedURI(uri,"wrongpass",time.Now());err==nil{t.Fatal("wrong passcode accepted")}
 }
 
 func TestLockedURIExpiry(t *testing.T) {
-	cfg:=LockedConfig{Profile:profile.Profile{Mode:profile.ModeDirect,Host:"ssh.example.test",Port:22,Username:"user"},ExpiryUnixMilli:1000}
+	cfg:=LockedConfig{Profile:profile.Profile{Mode:profile.ModeDirect,Host:"ssh.example.test",Port:22,Username:"user",Password:"secret"},ExpiryUnixMilli:1000}
 	uri,err:=EncodeLockedURI(cfg,"")
 	if err!=nil{t.Fatal(err)}
 	if _,err=DecodeLockedURI(uri,"",time.UnixMilli(1000));err==nil{t.Fatal("expired profile accepted")}
 }
 
 func TestLockedURIPlaintextMode(t *testing.T) {
-	cfg:=LockedConfig{Profile:profile.Profile{Mode:profile.ModeDirect,Host:"ssh.example.test",Port:22,Username:"user"}}
+	cfg:=LockedConfig{Profile:profile.Profile{Mode:profile.ModeDirect,Host:"ssh.example.test",Port:22,Username:"user",Password:"secret"}}
 	uri,err:=EncodeLockedURI(cfg,"")
 	if err!=nil{t.Fatal(err)}
 	got,err:=DecodeLockedURI(uri,"",time.Now())
@@ -45,7 +45,7 @@ func TestLockedURIPlaintextMode(t *testing.T) {
 
 func TestLockedURIRejectsNegativeExpiry(t *testing.T) {
 	cfg := LockedConfig{
-		Profile: profile.Profile{Mode: profile.ModeDirect, Host: "ssh.example.test", Port: 22, Username: "user"},
+		Profile: profile.Profile{Mode: profile.ModeDirect, Host: "ssh.example.test", Port: 22, Username: "user", Password: "secret"},
 		ExpiryUnixMilli: -1,
 	}
 	if _, err := EncodeLockedURI(cfg, ""); err == nil {
@@ -55,7 +55,7 @@ func TestLockedURIRejectsNegativeExpiry(t *testing.T) {
 
 func TestLockedURIPasscodeLengthUsesCharacters(t *testing.T) {
 	cfg := LockedConfig{
-		Profile: profile.Profile{Mode: profile.ModeDirect, Host: "ssh.example.test", Port: 22, Username: "user"},
+		Profile: profile.Profile{Mode: profile.ModeDirect, Host: "ssh.example.test", Port: 22, Username: "user", Password: "secret"},
 	}
 	if _, err := EncodeLockedURI(cfg, "éééé"); err == nil {
 		t.Fatal("four Unicode characters should not satisfy the eight-character minimum")
