@@ -20,10 +20,15 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.ImageView
+import android.graphics.Bitmap
 import org.json.JSONObject
 import org.json.JSONArray
 import java.io.ByteArrayOutputStream
 import dev.go.core.mobile.Bridge
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.integration.android.IntentIntegrator
+import com.google.zxing.qrcode.QRCodeWriter
 
 class MainActivity : Activity() {
     private lateinit var fields: LinearLayout
@@ -117,6 +122,10 @@ class MainActivity : Activity() {
         fields.addView(Button(this).apply {
             text = "Paste URI list"
             setOnClickListener { pasteURIList() }
+        })
+        fields.addView(Button(this).apply {
+            text = "Scan QR"
+            setOnClickListener { scanProfileQr() }
         })
         fields.addView(Button(this).apply {
             text = "Paste SSH URI"
@@ -542,6 +551,76 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun scanProfileQr() {
+        IntentIntegrator(this)
+            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+            .setPrompt("Scan a Go or SSH profile QR")
+            .setBeepEnabled(false)
+            .setOrientationLocked(false)
+            .initiateScan()
+    }
+
+    private fun importScannedProfile(value: String) {
+        val raw = value.trim()
+        try {
+            when {
+                raw.startsWith("ssh://") -> {
+                    val parsed = JSONObject(importBridge.parseSSHURI(raw))
+                    applyImportedConfig(JSONObject().put("profile", parsed).put("locked", false).put("blockRoot", false))
+                }
+                raw.startsWith("go-ssh://locked/") -> {
+                    val passcode = EditText(this).apply {
+                        hint = "Passcode (leave blank if none)"
+                        inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                            android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    }
+                    AlertDialog.Builder(this).setTitle("Import locked QR")
+                        .setView(passcode)
+                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton("Import") { _, _ ->
+                            try {
+                                val result = JSONObject(
+                                    importBridge.importLockedURI(raw, passcode.text.toString(), System.currentTimeMillis())
+                                )
+                                applyImportedConfig(result)
+                            } catch (e: Exception) {
+                                status.text = "QR import failed: ${e.message ?: "invalid locked profile"}"
+                            }
+                        }
+                        .show()
+                }
+                raw.startsWith("{") -> {
+                    importBridge.validateProfile(raw)
+                    applyImportedConfig(JSONObject().put("profile", JSONObject(raw)).put("locked", false).put("blockRoot", false))
+                }
+                else -> error("Unsupported QR profile format")
+            }
+        } catch (e: Exception) {
+            status.text = "QR import failed: ${e.message ?: "invalid profile"}"
+        }
+    }
+
+    private fun showProfileQr(value: String) {
+        try {
+            val matrix = QRCodeWriter().encode(value, BarcodeFormat.QR_CODE, 900, 900)
+            val bitmap = Bitmap.createBitmap(900, 900, Bitmap.Config.ARGB_8888)
+            for (x in 0 until 900) {
+                for (y in 0 until 900) {
+                    bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                }
+            }
+            val image = ImageView(this).apply {
+                setImageBitmap(bitmap)
+                adjustViewBounds = true
+                setPadding(16, 16, 16, 16)
+            }
+            AlertDialog.Builder(this).setTitle("Go profile QR")
+                .setView(image).setPositiveButton("Close", null).show()
+        } catch (e: Exception) {
+            status.text = "QR unavailable: profile is too large or invalid"
+        }
+    }
+
     private fun pasteURIList() {
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         val raw = clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
@@ -690,6 +769,7 @@ class MainActivity : Activity() {
                     } else {
                         "Encrypted locked URI copied"
                     }
+                    showProfileQr(uri)
                 } catch (e: Exception) {
                     status.text = "Export failed: ${e.message ?: "invalid profile"}"
                 }
@@ -725,6 +805,15 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Android")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        val scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
+        if (scanResult != null) {
+            if (scanResult.contents.isNullOrBlank()) {
+                status.text = "QR scan cancelled"
+            } else {
+                importScannedProfile(scanResult.contents)
+            }
+            return
+        }
         if (requestCode == LEGACY_PROFILE_REQUEST && resultCode == RESULT_OK) {
             data?.data?.let { importLegacyProfile(it) }
             return
