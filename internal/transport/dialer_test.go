@@ -33,9 +33,9 @@ func TestRejectNon200WhenDisabled(t *testing.T) {
 	if err := readPayloadResponse(c, false); err == nil { t.Fatal("expected non-200 rejection") }
 }
 
-type fakeConn struct { response string; written string }
+type fakeConn struct { response string; written string; maxWrite int }
 func (f *fakeConn) Read(p []byte)(int,error){ if f.response=="" { return 0,io.EOF }; n:=copy(p,f.response); f.response=f.response[n:]; return n,nil }
-func (f *fakeConn) Write(p []byte)(int,error){ f.written+=string(p); return len(p),nil }
+func (f *fakeConn) Write(p []byte)(int,error){ n:=len(p); if f.maxWrite>0&&n>f.maxWrite{n=f.maxWrite}; f.written+=string(p[:n]); return n,nil }
 func (f *fakeConn) Close()error{return nil}
 func (f *fakeConn) LocalAddr() net.Addr{return fakeAddr("local")}
 func (f *fakeConn) RemoteAddr() net.Addr{return fakeAddr("remote")}
@@ -90,3 +90,10 @@ func TestAcceptAnyStatusLiveProxyDoesNotWriteSynthetic200(t *testing.T) {
 	}
 }
 
+
+func TestWriteAndCheckHandlesPartialWrites(t *testing.T) {
+	c := &fakeConn{response: "HTTP/1.1 200 OK\r\n\r\n", maxWrite: 3}
+	request := []byte("CONNECT target:22 HTTP/1.0\r\n\r\n")
+	if err := writeAndCheck(c, request, false); err != nil { t.Fatal(err) }
+	if c.written != string(request) { t.Fatalf("written=%q", c.written) }
+}
