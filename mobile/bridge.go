@@ -2,6 +2,7 @@ package mobile
 
 import (
 	"sync"
+	"errors"
 	"encoding/json"
 	"time"
 
@@ -46,6 +47,14 @@ func(b *Bridge)Connect(profileJSON string)error{
 	if b.ssh!=nil{_=b.ssh.Close()}
 	b.ssh=client;b.socks=server;b.udp=udpClient;b.dnsResolver=p.DNSResolver
 	return nil
+}
+
+func(b *Bridge)Wait() error {
+	b.mu.Lock()
+	client := b.ssh
+	b.mu.Unlock()
+	if client == nil { return errors.New("SSH client is not connected") }
+	return client.Wait()
 }
 
 func(b *Bridge)SocksAddress()string{b.mu.Lock();defer b.mu.Unlock();if b.socks==nil{return ""};return b.socks.AddrString()}

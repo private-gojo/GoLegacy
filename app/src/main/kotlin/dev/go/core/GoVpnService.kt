@@ -31,11 +31,13 @@ class GoVpnService : VpnService() {
         when (intent?.action) {
             ACTION_DISCONNECT -> {
                 stopRequested = true
+                bridge.close()
                 worker.execute { stopTunnel() }
             }
             ACTION_CONNECT -> {
                 val raw = intent.getStringExtra(EXTRA_PROFILE)
                 stopRequested = true
+                bridge.close()
                 if (raw.isNullOrBlank()) {
                     worker.execute { stopTunnel() }
                 } else {
@@ -60,7 +62,24 @@ class GoVpnService : VpnService() {
         while (!stopRequested) {
             try {
                 startTunnelOnce(raw)
-                return
+                val waiter = Thread { bridge.wait() }.apply {
+                    name = "go-ssh-waiter"
+                    isDaemon = true
+                    start()
+                }
+                while (!stopRequested && waiter.isAlive && TProxyService.TProxyIsRunning()) {
+                    Thread.sleep(1000)
+                }
+                if (stopRequested) return
+                cleanupTunnel()
+                broadcastStatus("retrying", "Tunnel transport disconnected")
+                updateNotification("Reconnecting in ${retryDelay / 1000}s")
+                var elapsed = 0L
+                while (elapsed < retryDelay && !stopRequested) {
+                    Thread.sleep(250)
+                    elapsed += 250
+                }
+                retryDelay = (retryDelay * 2).coerceAtMost(30_000L)
             } catch (e: Exception) {
                 cleanupTunnel()
                 broadcastStatus("retrying", e.message ?: "Connection failed")
@@ -116,6 +135,7 @@ class GoVpnService : VpnService() {
             val delay = (profile.optLong("expiryUnixMilli") - System.currentTimeMillis()).coerceAtLeast(0L)
             expiryRunnable = Runnable {
                 stopRequested = true
+                bridge.close()
                 worker.execute { stopTunnel() }
             }
             mainHandler.postDelayed(expiryRunnable!!, delay)
@@ -188,12 +208,14 @@ class GoVpnService : VpnService() {
 
     override fun onRevoke() {
         stopRequested = true
+        bridge.close()
         worker.execute { stopTunnel() }
         super.onRevoke()
     }
 
     override fun onDestroy() {
         stopRequested = true
+        bridge.close()
         expiryRunnable?.let { mainHandler.removeCallbacks(it) }
         expiryRunnable = null
         worker.execute { cleanupTunnel() }

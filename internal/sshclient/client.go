@@ -63,6 +63,14 @@ func hostKeyCallback(p profile.Profile)ssh.HostKeyCallback{
 	}
 }
 
+func(c *Client)Wait() error {
+	c.mu.Lock()
+	client := c.client
+	c.mu.Unlock()
+	if client == nil { return errors.New("SSH client is not connected") }
+	return client.Wait()
+}
+
 func(c *Client)Dial(network,address string)(net.Conn,error){
 	c.mu.Lock();client:=c.client;c.mu.Unlock()
 	if client==nil{return nil,errors.New("SSH client is not connected")}
