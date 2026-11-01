@@ -66,13 +66,10 @@ func ImportSKS(raw []byte, appVersionCode int, now time.Time) (Imported, error) 
 	if version > appVersionCode { return result, fmt.Errorf("profile requires app version code %d; current is %d", version, appVersionCode) }
 
 	protected := props["file.proteger"] == "1"
-	expiry := int64(0)
-	if rawExpiry := props["file.validade"]; rawExpiry != "" {
-		expiry, err = strconv.ParseInt(rawExpiry, 10, 64)
-		if err != nil { return result, errors.New("invalid profile expiry") }
-	} else if protected {
-		return result, errors.New("locked profile is missing expiry")
-	}
+	rawExpiry, exists := props["file.validade"]
+	if !exists { return result, errors.New("profile is missing expiry metadata") }
+	expiry, err := strconv.ParseInt(rawExpiry, 10, 64)
+	if err != nil { return result, errors.New("invalid profile expiry") }
 	if !protected || expiry < 0 { expiry = 0 }
 	if protected && expiry > 0 && now.UnixMilli() >= expiry { return result, errors.New("profile has expired") }
 
