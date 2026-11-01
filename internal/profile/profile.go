@@ -3,6 +3,9 @@ package profile
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"encoding/base64"
+	"encoding/hex"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net"
@@ -109,6 +112,16 @@ func(p Profile)Validate()error{
 	if p.DNSResolver != "" {
 		dnsIP := net.ParseIP(p.DNSResolver)
 		if dnsIP == nil || dnsIP.To4() == nil { return errors.New("DNS resolver must be an IPv4 address") }
+	}
+	if p.TLSFingerprint != "" {
+		fingerprint := strings.ReplaceAll(p.TLSFingerprint, ":", "")
+		decoded, err := hex.DecodeString(fingerprint)
+		if err != nil || len(decoded) != sha256.Size { return errors.New("invalid TLS SHA-256 fingerprint") }
+	}
+	if p.HostKeySHA256 != "" {
+		fingerprint := strings.TrimPrefix(p.HostKeySHA256, "SHA256:")
+		decoded, err := base64.RawStdEncoding.DecodeString(fingerprint)
+		if err != nil || len(decoded) != sha256.Size { return errors.New("invalid SSH host-key SHA-256 fingerprint") }
 	}
 	return nil
 }
