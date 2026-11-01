@@ -1,6 +1,7 @@
+val releaseVersionName = "0.1.0"
+
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
@@ -13,7 +14,7 @@ android {
         minSdk = 21
         targetSdk = 37
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = releaseVersionName
     }
 
     signingConfigs {
@@ -46,8 +47,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-    kotlinOptions { jvmTarget = "17" }
 }
 
 dependencies {
@@ -59,5 +58,5 @@ tasks.register<Copy>("copyGoReleaseApk") {
     dependsOn("assembleRelease")
     from(fileTree(layout.buildDirectory.dir("outputs/apk/release")) { include("*.apk") })
     into(layout.buildDirectory.dir("outputs/go"))
-    rename { "Go-${android.defaultConfig.versionName}.apk" }
+    rename { "Go-$releaseVersionName.apk" }
 }
