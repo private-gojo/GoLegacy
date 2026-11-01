@@ -53,6 +53,7 @@ func EncodeLockedURI(config LockedConfig, passcode string) (string, error) {
 	salt, nonce := []byte(nil), []byte(nil)
 	payloadLength := len(plain)
 	if passcode != "" {
+		if len(passcode) < 8 { return "", errors.New("passcode must contain at least 8 characters") }
 		flags, kdf, cipherID = lockedFlagEncrypted, lockedKDFArgon2id, lockedCipherAESGCM
 		salt = make([]byte, lockedSaltSize)
 		nonce = make([]byte, lockedNonceSize)
@@ -83,8 +84,10 @@ func EncodeLockedURI(config LockedConfig, passcode string) (string, error) {
 
 func DecodeLockedURI(uri, passcode string, now time.Time) (LockedConfig, error) {
 	var result LockedConfig
+	if len(uri) > 2*lockedMaxPayload { return result, errors.New("locked profile URI is too large") }
 	u, err := url.Parse(uri)
 	if err != nil { return result, err }
+	if u.RawQuery != "" || u.Fragment != "" { return result, errors.New("unexpected locked profile URI parameters") }
 	if u.Scheme != "go-ssh" || u.Host != "locked" { return result, errors.New("unsupported locked profile URI") }
 	encoded := strings.TrimPrefix(u.EscapedPath(), "/")
 	blob, err := base64.RawURLEncoding.DecodeString(encoded)
@@ -92,6 +95,7 @@ func DecodeLockedURI(uri, passcode string, now time.Time) (LockedConfig, error) 
 	if len(blob) < lockedHeaderSize || string(blob[:4]) != lockedMagic { return result, errors.New("invalid locked profile header") }
 	header := blob[:lockedHeaderSize]
 	if header[4] != lockedVersion { return result, fmt.Errorf("unsupported locked profile version %d", header[4]) }
+	if header[5]&^lockedFlagEncrypted != 0 || header[10] != 0 || header[11] != 0 { return result, errors.New("invalid locked profile flags") }
 	saltLen, nonceLen := int(header[8]), int(header[9])
 	payloadLen := int(binary.BigEndian.Uint32(header[12:16]))
 	if payloadLen < 1 || payloadLen > lockedMaxPayload+16 { return result, errors.New("invalid locked profile payload length") }
