@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.VpnService
 import android.net.IpPrefix
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import java.net.InetAddress
 import java.net.Inet4Address
 import android.os.Build
@@ -84,6 +85,14 @@ class GoVpnService : VpnService() {
         if (importedProfile.optBoolean("blockRoot", false) && isDeviceRooted()) {
             if (generation == requestGeneration) {
                 broadcastStatus("error", "This locked profile does not allow rooted devices")
+                stopTunnel(generation)
+            }
+            return
+        }
+        if (importedProfile.optBoolean("antiVpnSniffer", false) &&
+            isOtherVpnActive() && !TProxyService.TProxyIsRunning()) {
+            if (generation == requestGeneration) {
+                broadcastStatus("error", "Another VPN is already active")
                 stopTunnel(generation)
             }
             return
@@ -242,6 +251,13 @@ class GoVpnService : VpnService() {
         }
         updateNotification("Go VPN connected")
         broadcastStatus("connected", "VPN connected")
+    }
+
+    private fun isOtherVpnActive(): Boolean {
+        val manager = getSystemService(ConnectivityManager::class.java)
+        val network = manager.activeNetwork ?: return false
+        return manager.getNetworkCapabilities(network)
+            ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
     }
 
     private fun isDeviceRooted(): Boolean {
