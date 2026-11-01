@@ -53,7 +53,12 @@ func(d *Dialer)Dial(p profile.Profile)(net.Conn,error){
 				sum:=sha256.Sum256(rawCerts[0]);if !equal(sum[:],expected){return errors.New("TLS certificate fingerprint mismatch")};return nil
 			}
 		}
-		tlsConn:=tls.Client(conn,cfg);if err:=tlsConn.Handshake();err!=nil{return fail(err)};conn=tlsConn
+		handshakeTimeout := time.Duration(p.HandshakeTimeoutMs) * time.Millisecond
+		if handshakeTimeout <= 0 { handshakeTimeout = 20 * time.Second }
+		if err := conn.SetDeadline(time.Now().Add(handshakeTimeout)); err != nil { return fail(err) }
+		tlsConn:=tls.Client(conn,cfg);if err:=tlsConn.Handshake();err!=nil{return fail(err)}
+		_ = tlsConn.SetDeadline(time.Time{})
+		conn=tlsConn
 	}
 
 	switch p.Mode{
