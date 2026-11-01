@@ -23,9 +23,9 @@ func TestLockedURIEncryptedRoundTrip(t *testing.T) {
 
 func TestLockedURIDoesNotAcceptWrongPasscode(t *testing.T) {
 	cfg:=LockedConfig{Profile:profile.Profile{Mode:profile.ModeDirect,Host:"ssh.example.test",Port:22,Username:"user"}}
-	uri,err:=EncodeLockedURI(cfg,"correct")
+	uri,err:=EncodeLockedURI(cfg,"correctpass")
 	if err!=nil{t.Fatal(err)}
-	if _,err=DecodeLockedURI(uri,"wrong",time.Now());err==nil{t.Fatal("wrong passcode accepted")}
+	if _,err=DecodeLockedURI(uri,"wrongpass",time.Now());err==nil{t.Fatal("wrong passcode accepted")}
 }
 
 func TestLockedURIExpiry(t *testing.T) {
