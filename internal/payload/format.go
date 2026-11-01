@@ -2,13 +2,12 @@ package payload
 
 import (
 	"crypto/rand"
-	"encoding/hex"
-	"errors"
-	"fmt"
+	"math/big"
 	"net"
-	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Context struct {
@@ -20,38 +19,80 @@ type Context struct {
 	UserAgent string
 }
 
-func Format(src string, c Context) ([]byte, error) {
-	hostPort := net.JoinHostPort(c.Host, strconv.Itoa(int(c.Port)))
-	repl := strings.NewReplacer(
-		"[method]", c.Method, "[host]", c.Host, "[port]", strconv.Itoa(int(c.Port)),
-		"[host_port]", hostPort, "[protocol]", c.Protocol, "[ssh]", c.SSH,
-		"[ua]", c.UserAgent, "[crlf]", "\r\n", "[cr]", "\r", "[lf]", "\n", "[lfcr]", "\n\r",
-		"\\n", "\n", "\\r", "\r",
-	)
-	out := repl.Replace(src)
-	for {
-		start := strings.Index(out, "[random=")
-		if start < 0 { break }
-		end := strings.IndexByte(out[start:], ']')
-		if end < 0 { return nil, errors.New("unterminated random token") }
-		end += start
-		n, err := strconv.Atoi(out[start+8:end])
-		if err != nil || n < 1 || n > 64 { return nil, fmt.Errorf("invalid random token at byte %d", start) }
-		buf := make([]byte, n)
-		if _, err := rand.Read(buf); err != nil { return nil, err }
-		out = out[:start] + hex.EncodeToString(buf)[:n] + out[end+1:]
-	}
-	for {
-		start := strings.Index(out, "[rotate=")
-		if start < 0 { break }
-		end := strings.IndexByte(out[start:], ']')
-		if end < 0 { return nil, errors.New("unterminated rotate token") }
-		end += start
-		raw := strings.Split(out[start+8:end], "|")
-		if len(raw) == 0 { return nil, errors.New("empty rotate token") }
-		out = out[:start] + raw[0] + out[end+1:]
-	}
-	return []byte(out), nil
+type Formatter struct {
+	lastPayload string
+	rotateIndex map[int]int
 }
 
-func EncodeQuery(value string) string { return url.QueryEscape(value) }
+var rotatePattern = regexp.MustCompile(`\[rotate=(.*?)\]`)
+var randomPattern = regexp.MustCompile(`\[random=(.*?)\]`)
+
+func NewFormatter() *Formatter { return &Formatter{rotateIndex:make(map[int]int)} }
+
+func (f *Formatter) Format(src string,c Context) []byte {
+	if f.rotateIndex==nil { f.rotateIndex=make(map[int]int) }
+	hostPort:=c.Host+":"+strconv.Itoa(int(c.Port))
+	if c.SSH!="" { hostPort=c.SSH }
+	if c.Method=="" { c.Method="CONNECT" }
+	if c.Protocol=="" { c.Protocol="HTTP/1.0" }
+	if c.UserAgent=="" { c.UserAgent="Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.130 Safari/537.36" }
+	out:=strings.NewReplacer(
+		"[method]",c.Method,"[host]",c.Host,"[port]",strconv.Itoa(int(c.Port)),
+		"[host_port]",hostPort,"[protocol]",c.Protocol,"[ssh]",hostPort,
+		"[crlf]","\r\n","[cr]","\r","[lf]","\n","[lfcr]","\n\r",
+		"\\n","\n","\\r","\r","[ua]",c.UserAgent,
+	).Replace(src)
+	if out!=f.lastPayload { clear(f.rotateIndex);f.lastPayload=out }
+	matches:=rotatePattern.FindAllStringSubmatch(out,-1)
+	for i,m:=range matches {
+		choices:=strings.Split(m[1],";");if len(choices)==0{continue}
+		next:=0;if old,ok:=f.rotateIndex[i];ok{next=(old+1)%len(choices)}
+		out=strings.ReplaceAll(out,m[0],choices[next]);f.rotateIndex[i]=next
+	}
+	matches=randomPattern.FindAllStringSubmatch(out,-1)
+	for _,m:=range matches {
+		choices:=strings.Split(m[1],";");if len(choices)==0{continue}
+		n,err:=rand.Int(rand.Reader,big.NewInt(int64(len(choices))));if err==nil{out=strings.ReplaceAll(out,m[0],choices[n.Int64()])}
+	}
+	return []byte(out)
+}
+
+func Format(src string,c Context)([]byte,error){return NewFormatter().Format(src,c),nil}
+
+type flushWriter interface { Write([]byte)(int,error); Flush() error }
+
+func InjectSplitPayload(request string,out flushWriter)(bool,error) {
+	if strings.Contains(request,"[delay_split]") {
+		parts:=javaSplit(request,"[delay_split]")
+		for i,part:=range parts {
+			handled,err:=injectSimpleSplit(part,out);if err!=nil{return true,err}
+			if !handled { if _,err=out.Write(latin1(part));err!=nil{return true,err};if err=out.Flush();err!=nil{return true,err} }
+			if i!=len(parts)-1 { time.Sleep(time.Second) }
+		}
+		return true,nil
+	}
+	return injectSimpleSplit(request,out)
+}
+
+func injectSimpleSplit(request string,out flushWriter)(bool,error) {
+	if !strings.Contains(request,"[split]"){return false,nil}
+	for _,part:=range javaSplit(request,"[split]") {
+		if _,err:=out.Write(latin1(part));err!=nil{return true,err}
+		if err:=out.Flush();err!=nil{return true,err}
+	}
+	return true,nil
+}
+
+func javaSplit(value,separator string)[]string{
+	parts:=strings.Split(value,separator)
+	for len(parts)>0&&parts[len(parts)-1]==""{parts=parts[:len(parts)-1]}
+	return parts
+}
+
+func latin1(value string)[]byte{
+	out:=make([]byte,0,len(value))
+	for _,r:=range value{if r>255{out=append(out,'?')}else{out=append(out,byte(r))}}
+	return out
+}
+
+func HostPort(host string,port uint16)string{return net.JoinHostPort(host,strconv.Itoa(int(port)))}
