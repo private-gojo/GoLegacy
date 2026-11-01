@@ -59,6 +59,7 @@ class MainActivity : Activity() {
     private lateinit var enableFilterApps: CheckBox
     private lateinit var filterBypassMode: CheckBox
     private lateinit var tetheringSubnet: CheckBox
+    private lateinit var antiVpnSniffer: CheckBox
     private lateinit var status: TextView
     private lateinit var exportButton: Button
     private var pendingProfile: String? = null
@@ -170,6 +171,7 @@ class MainActivity : Activity() {
         enableFilterApps = toggle("Enable app filter", false)
         filterBypassMode = toggle("Bypass listed apps", false)
         tetheringSubnet = toggle("Allow tethering subnets outside VPN", false)
+        antiVpnSniffer = toggle("Block when another VPN is active", false)
         status = label("Disconnected")
         fields.addView(status)
 
@@ -298,6 +300,7 @@ class MainActivity : Activity() {
             .put("filterBypassMode", filterBypassMode.isChecked)
             .put("filterApps", JSONArray(filterApps.text.toString().split(Regex("[,\\s]+")).filter { it.isNotBlank() }))
             .put("tetheringSubnet", tetheringSubnet.isChecked)
+            .put("antiVpnSniffer", antiVpnSniffer.isChecked)
             .put("blockRoot", importedBlockRoot)
             .toString()
     }
@@ -398,6 +401,7 @@ class MainActivity : Activity() {
         enableFilterApps.isChecked = imported.optBoolean("enableFilterApps", false)
         filterBypassMode.isChecked = imported.optBoolean("filterBypassMode", false)
         tetheringSubnet.isChecked = imported.optBoolean("tetheringSubnet", false)
+        antiVpnSniffer.isChecked = imported.optBoolean("antiVpnSniffer", false)
         acceptAnyStatus.isChecked = imported.optBoolean("acceptAnyStatus", true)
         verifyTLS.isChecked = imported.optBoolean("verifyTls", false)
         udpForward.isChecked = imported.optBoolean("udpForward", true)
@@ -526,6 +530,7 @@ class MainActivity : Activity() {
         enableFilterApps.isChecked = false
         filterBypassMode.isChecked = false
         tetheringSubnet.isChecked = false
+        antiVpnSniffer.isChecked = false
         acceptAnyStatus.isChecked = true
         verifyTLS.isChecked = false
         udpForward.isChecked = true
