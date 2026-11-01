@@ -59,6 +59,8 @@ class MainActivity : Activity() {
     private var pendingProfile: String? = null
     private var pendingExportJson: String? = null
     private var lockedProfileRaw: String? = null
+    private var currentConfigWrapper: JSONObject? = null
+    private val profileStore by lazy { ProfileStore(this) }
     private var importedBlockRoot = false
     private val hiddenProfileViews = mutableListOf<android.view.View>()
     private val importBridge = Bridge()
@@ -119,6 +121,14 @@ class MainActivity : Activity() {
         fields.addView(Button(this).apply {
             text = "Paste SSH URI"
             setOnClickListener { pasteSSHURI() }
+        })
+        fields.addView(Button(this).apply {
+            text = "Save profile"
+            setOnClickListener { saveProfile() }
+        })
+        fields.addView(Button(this).apply {
+            text = "Load saved profile"
+            setOnClickListener { loadSavedProfiles() }
         })
         fields.addView(Button(this).apply {
             text = "New profile"
@@ -395,6 +405,69 @@ class MainActivity : Activity() {
             exportButton.isEnabled = true
             status.text = "Profile imported"
         }
+        currentConfigWrapper = JSONObject(result.toString())
+    }
+
+    private fun saveProfile() {
+        val nameInput = EditText(this).apply {
+            hint = "Profile name"
+            setText(host.text.toString().trim())
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Save profile")
+            .setView(nameInput)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { _, _ ->
+                try {
+                    val name = nameInput.text.toString().trim()
+                    if (name.isEmpty()) error("Profile name is required")
+                    val config = if (lockedProfileRaw != null) {
+                        currentConfigWrapper ?: error("Locked profile data is unavailable")
+                    } else {
+                        JSONObject().put("profile", JSONObject(buildProfileJson()))
+                            .put("locked", false).put("blockRoot", false)
+                    }
+                    val records = JSONArray(profileStore.read())
+                    val updated = JSONArray()
+                    for (i in 0 until records.length()) {
+                        val item = records.getJSONObject(i)
+                        if (!item.optString("name").equals(name, ignoreCase = true)) updated.put(item)
+                    }
+                    updated.put(JSONObject().put("name", name).put("config", JSONObject(config.toString())))
+                    profileStore.write(updated.toString())
+                    status.text = "Profile saved securely"
+                } catch (e: Exception) {
+                    status.text = "Save failed: ${e.message ?: "storage error"}"
+                }
+            }
+            .show()
+    }
+
+    private fun loadSavedProfiles() {
+        try {
+            val records = JSONArray(profileStore.read())
+            if (records.length() == 0) {
+                status.text = "No saved profiles"
+                return
+            }
+            val labels = Array(records.length()) { i ->
+                records.getJSONObject(i).optString("name", "Profile ${i + 1}")
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Saved profiles")
+                .setItems(labels) { _, which ->
+                    try {
+                        val config = records.getJSONObject(which).getJSONObject("config")
+                        applyImportedConfig(JSONObject(config.toString()))
+                    } catch (e: Exception) {
+                        status.text = "Load failed: ${e.message ?: "invalid saved profile"}"
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } catch (e: Exception) {
+            status.text = "Load failed: ${e.message ?: "profile store error"}"
+        }
     }
 
     private fun importLegacyProfile(uri: android.net.Uri) {
@@ -418,6 +491,7 @@ class MainActivity : Activity() {
 
     private fun resetProfile() {
         lockedProfileRaw = null
+        currentConfigWrapper = null
         importedBlockRoot = false
         exportButton.isEnabled = true
         hiddenProfileViews.forEach { it.visibility = android.view.View.VISIBLE }
