@@ -91,8 +91,7 @@ func(d *Dialer)sendPayload(conn net.Conn,p profile.Profile)error{
 		if !handled{if _,err=writer.Write(payload.EncodeLatin1(string(data)));err!=nil{return err};return writer.Flush()}
 		return nil
 	}
-	_,err:=conn.Write(payload.EncodeLatin1(string(data)))
-	return err
+	return writeFull(conn, payload.EncodeLatin1(string(data)))
 }
 
 func defaultConnect(host string,port uint16)[]byte{
@@ -100,8 +99,18 @@ func defaultConnect(host string,port uint16)[]byte{
 }
 
 func writeAndCheck(conn net.Conn,data []byte,acceptAny bool)error{
-	if _,err:=conn.Write(data);err!=nil{return err}
+	if err:=writeFull(conn,data);err!=nil{return err}
 	return readPayloadResponse(conn,acceptAny)
+}
+
+func writeFull(conn net.Conn,data []byte)error{
+	for len(data)>0{
+		n,err:=conn.Write(data)
+		if err!=nil{return err}
+		if n==0{return io.ErrShortWrite}
+		data=data[n:]
+	}
+	return nil
 }
 
 func readPayloadResponse(conn net.Conn,acceptAny bool)error{
