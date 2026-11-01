@@ -47,6 +47,13 @@ type Profile struct {
 	UDPResolver string `json:"udpResolver"`
 	DNSForward bool `json:"dnsForward"`
 	DNSResolver string `json:"dnsResolver"`
+	ExcludeIPs []string `json:"excludeIps,omitempty"`
+	EnableFilterApps bool `json:"enableFilterApps"`
+	FilterBypassMode bool `json:"filterBypassMode"`
+	FilterApps []string `json:"filterApps,omitempty"`
+	TetheringSubnet bool `json:"tetheringSubnet"`
+	BlockRoot bool `json:"blockRoot,omitempty"`
+	AntiVpnSniffer bool `json:"antiVpnSniffer"`
 	ConnectTimeout time.Duration `json:"connectTimeout,omitempty"`
 }
 
@@ -117,6 +124,14 @@ func(p Profile)Validate()error{
 		fingerprint := strings.ReplaceAll(p.TLSFingerprint, ":", "")
 		decoded, err := hex.DecodeString(fingerprint)
 		if err != nil || len(decoded) != sha256.Size { return errors.New("invalid TLS SHA-256 fingerprint") }
+	}
+	if p.EnableFilterApps && len(p.FilterApps) == 0 { return errors.New("app filtering requires at least one package") }
+	for _, app := range p.FilterApps {
+		if strings.TrimSpace(app) == "" || strings.ContainsAny(app, " /\\") { return errors.New("invalid app package in filter list") }
+	}
+	for _, ip := range p.ExcludeIPs {
+		parsed := net.ParseIP(strings.TrimSpace(ip))
+		if parsed == nil || parsed.To4() == nil { return fmt.Errorf("invalid excluded IPv4 address %q", ip) }
 	}
 	if p.HostKeySHA256 != "" {
 		fingerprint := strings.TrimPrefix(p.HostKeySHA256, "SHA256:")
