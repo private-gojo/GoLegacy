@@ -2,7 +2,7 @@ FROM debian:bookworm-slim
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        openssh-server dropbear build-essential cmake git python3 \
+        ca-certificates openssh-server dropbear build-essential cmake git python3 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 https://github.com/ambrop72/badvpn.git /opt/badvpn \
