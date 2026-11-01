@@ -30,12 +30,12 @@ const (
 )
 
 type Imported struct {
-	Profile profile.Profile
-	Locked bool
-	ExpiryUnixMilli int64
-	Message string
-	BlockRoot bool
-	LegacyFormat string
+	Profile profile.Profile `json:"profile"`
+	Locked bool `json:"locked"`
+	ExpiryUnixMilli int64 `json:"expiryUnixMilli"`
+	Message string `json:"message"`
+	BlockRoot bool `json:"blockRoot"`
+	LegacyFormat string `json:"legacyFormat"`
 }
 
 type propertiesDocument struct {

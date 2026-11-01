@@ -2,6 +2,10 @@ package mobile
 
 import (
 	"sync"
+	"encoding/json"
+	"time"
+
+	"dev.go.core/internal/config"
 
 	"dev.go.core/internal/payload"
 	"dev.go.core/internal/profile"
@@ -54,6 +58,15 @@ func(b *Bridge)Close()error{
 	b.dnsResolver=""
 	if b.ssh!=nil{err:=b.ssh.Close();b.ssh=nil;return err}
 	return nil
+}
+
+
+func (b *Bridge) ImportSKS(raw []byte, appVersionCode int, nowUnixMilli int64) (string, error) {
+	imported, err := config.ImportSKS(raw, appVersionCode, time.UnixMilli(nowUnixMilli))
+	if err != nil { return "", err }
+	encoded, err := json.Marshal(imported)
+	if err != nil { return "", err }
+	return string(encoded), nil
 }
 
 func(b *Bridge)IsConnected()bool{b.mu.Lock();defer b.mu.Unlock();return b.ssh!=nil&&b.socks!=nil}
