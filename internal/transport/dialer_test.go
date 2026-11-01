@@ -58,11 +58,11 @@ func TestAcceptAnyStatusLiveProxyDoesNotWriteSynthetic200(t *testing.T) {
 		defer conn.Close()
 		reader := bufio.NewReader(conn)
 		for {
-			line, readErr := reader.ReadString('\\n')
+			line, readErr := reader.ReadString('\n')
 			if readErr != nil { serverResult <- readErr; return }
-			if line == "\\r\\n" { break }
+			if line == "\r\n" { break }
 		}
-		if _, err = io.WriteString(conn, "HTTP/1.1 302 Found\\r\\nLocation: https://example.test/\\r\\n\\r\\n"); err != nil {
+		if _, err = io.WriteString(conn, "HTTP/1.1 302 Found\r\nLocation: https://example.test/\r\n\r\n"); err != nil {
 			serverResult <- err
 			return
 		}
@@ -79,7 +79,7 @@ func TestAcceptAnyStatusLiveProxyDoesNotWriteSynthetic200(t *testing.T) {
 	conn, err := net.Dial("tcp", listener.Addr().String())
 	if err != nil { t.Fatal(err) }
 	defer conn.Close()
-	if err := writeAndCheck(conn, []byte("CONNECT ssh.example:22 HTTP/1.0\\r\\n\\r\\n"), true); err != nil {
+	if err := writeAndCheck(conn, []byte("CONNECT ssh.example:22 HTTP/1.0\r\n\r\n"), true); err != nil {
 		t.Fatal(err)
 	}
 	select {
