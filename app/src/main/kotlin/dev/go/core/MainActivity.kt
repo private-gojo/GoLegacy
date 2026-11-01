@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
-import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -30,6 +29,8 @@ class MainActivity : Activity() {
     private lateinit var proxyPort: EditText
     private lateinit var sni: EditText
     private lateinit var payload: EditText
+    private lateinit var udpResolver: EditText
+    private lateinit var dnsResolver: EditText
     private lateinit var mode: Spinner
     private lateinit var status: TextView
 
@@ -64,6 +65,8 @@ class MainActivity : Activity() {
         proxyPort = input("Proxy port")
         sni = input("SNI")
         payload = input("Custom payload")
+        udpResolver = input("UDP gateway", "127.0.0.1:7300")
+        dnsResolver = input("DNS resolver", "1.1.1.1")
         status = label("Disconnected")
         fields.addView(status)
 
@@ -125,6 +128,10 @@ class MainActivity : Activity() {
             .put("sni", sni.text.toString().trim())
             .put("payload", payload.text.toString())
             .put("acceptAnyStatus", true)
+            .put("udpForward", true)
+            .put("udpResolver", udpResolver.text.toString().trim())
+            .put("dnsForward", true)
+            .put("dnsResolver", dnsResolver.text.toString().trim())
 
         status.text = "Connecting..."
         worker.execute {

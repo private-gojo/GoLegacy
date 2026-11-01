@@ -39,6 +39,10 @@ type Profile struct {
 	HostKeySHA256 string `json:"hostKeySha256,omitempty"`
 	DisableDelaySSH bool `json:"disableDelaySSH"`
 	KeepAliveSeconds int `json:"keepAliveSeconds,omitempty"`
+	UDPForward bool `json:"udpForward"`
+	UDPResolver string `json:"udpResolver"`
+	DNSForward bool `json:"dnsForward"`
+	DNSResolver string `json:"dnsResolver"`
 	ConnectTimeout time.Duration `json:"connectTimeout,omitempty"`
 }
 
@@ -48,6 +52,10 @@ func ParseJSON(raw string)(Profile,error){
 	var fields map[string]json.RawMessage
 	if err:=json.Unmarshal([]byte(raw),&fields);err!=nil{return p,err}
 	if _,ok:=fields["acceptAnyStatus"];!ok{p.AcceptAnyStatus=true}
+	if _,ok:=fields["udpForward"];!ok{p.UDPForward=true}
+	if _,ok:=fields["udpResolver"];!ok{p.UDPResolver="127.0.0.1:7300"}
+	if _,ok:=fields["dnsForward"];!ok{p.DNSForward=true}
+	if _,ok:=fields["dnsResolver"];!ok{p.DNSResolver="1.1.1.1"}
 	return p,p.Validate()
 }
 
@@ -56,18 +64,20 @@ func ParseURI(raw string)(Profile,error){
 	if u.Scheme!="ssh"{return Profile{},errors.New("unsupported URI scheme")}
 	port:=u.Port();if port==""{port="22"}
 	n,err:=strconv.ParseUint(port,10,16);if err!=nil||n==0{return Profile{},errors.New("invalid SSH port")}
-	p:=Profile{Mode:ModeDirect,Host:u.Hostname(),Port:uint16(n),AcceptAnyStatus:true}
+	p:=Profile{Mode:ModeDirect,Host:u.Hostname(),Port:uint16(n),AcceptAnyStatus:true,UDPForward:true,UDPResolver:"127.0.0.1:7300",DNSForward:true,DNSResolver:"1.1.1.1"}
 	if u.User!=nil{p.Username=u.User.Username();p.Password,_=u.User.Password()}
 	q:=u.Query()
 	if q.Get("mode")!=""{p.Mode=Mode(q.Get("mode"))}
 	p.SNI=q.Get("sni");p.Payload=q.Get("payload");p.ProxyHost=q.Get("proxyHost")
 	if v:=q.Get("proxyPort");v!=""{x,e:=strconv.ParseUint(v,10,16);if e!=nil||x==0{return p,errors.New("invalid proxy port")};p.ProxyPort=uint16(x)}
 	if v:=q.Get("acceptAnyStatus");v!=""{p.AcceptAnyStatus=v!="false"}
-	p.VerifyTLS=q.Get("verifyTls")=="true"
-	p.TLSFingerprint=q.Get("tlsFingerprint")
-	p.HostKeySHA256=q.Get("hostKeySha256")
+	p.VerifyTLS=q.Get("verifyTls")=="true";p.TLSFingerprint=q.Get("tlsFingerprint");p.HostKeySHA256=q.Get("hostKeySha256")
 	p.DisableDelaySSH=q.Get("disableDelaySSH")=="true"
 	if v:=q.Get("keepalive");v!=""{x,e:=strconv.Atoi(v);if e!=nil{return p,errors.New("invalid keepalive")};p.KeepAliveSeconds=x}
+	if v:=q.Get("udp");v!=""{p.UDPForward=v!="false"}
+	if v:=q.Get("udpResolver");v!=""{p.UDPResolver=v}
+	if v:=q.Get("dns");v!=""{p.DNSForward=v!="false"}
+	if v:=q.Get("dnsResolver");v!=""{p.DNSResolver=v}
 	p.Name=u.Fragment
 	return p,p.Validate()
 }
@@ -82,5 +92,10 @@ func(p Profile)Validate()error{
 	if p.Username==""{return errors.New("SSH username is required")}
 	if p.Mode==ModeProxy&&(p.ProxyHost==""||p.ProxyPort==0){return errors.New("proxy host and port are required for proxy mode")}
 	if p.KeepAliveSeconds<0||p.KeepAliveSeconds>3600{return errors.New("keepalive must be between 0 and 3600 seconds")}
+	if p.UDPForward{
+		host,port,err:=net.SplitHostPort(p.UDPResolver);if err!=nil||host==""{return errors.New("invalid UDPGW resolver endpoint")}
+		n,e:=strconv.Atoi(port);if e!=nil||n<1||n>65535{return errors.New("invalid UDPGW resolver port")}
+	}
+	if p.DNSForward&&net.ParseIP(p.DNSResolver)==nil{return errors.New("DNS resolver must be an IP address")}
 	return nil
 }
