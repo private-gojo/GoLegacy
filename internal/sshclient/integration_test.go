@@ -1,6 +1,8 @@
 package sshclient
 
 import (
+	"bytes"
+	"errors"
 	"bufio"
 	"encoding/binary"
 	"crypto/rand"
@@ -18,8 +20,6 @@ import (
 
 	"dev.go.core/internal/profile"
 	"dev.go.core/internal/socks5"
-
-	"dev.go.core/internal/profile"
 )
 
 func TestSSHAgainstLegacyServerTypes(t *testing.T) {
@@ -228,11 +228,11 @@ func TestDNSOverTCPThroughSSH(t *testing.T) {
 	}()
 
 	client := &Client{}
-	profile := profile.Profile{
+	p := profile.Profile{
 		Mode: profile.ModeDirect, Host: "127.0.0.1", Port: uint16(sshPort),
 		Username: username, Password: password, KeepAliveSeconds: 0,
 	}
-	if err := client.Connect(profile); err != nil { t.Fatalf("SSH connect: %v", err) }
+	if err := client.Connect(p); err != nil { t.Fatalf("SSH connect: %v", err) }
 	defer client.Close()
 
 	server := &socks5.Server{
