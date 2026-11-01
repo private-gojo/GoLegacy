@@ -32,8 +32,7 @@ var randomPattern = regexp.MustCompile(`\[random=(.*?)\]`)
 func NewFormatter()*Formatter{return &Formatter{rotateIndex:make(map[int]int)}}
 
 func(f *Formatter)Format(src string,c Context)[]byte{
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.Lock();defer f.mu.Unlock()
 	if f.rotateIndex==nil{f.rotateIndex=make(map[int]int)}
 	hostPort:=c.Host+":"+strconv.Itoa(int(c.Port));if c.SSH!=""{hostPort=c.SSH}
 	if c.Method==""{c.Method="CONNECT"};if c.Protocol==""{c.Protocol="HTTP/1.0"}
@@ -66,7 +65,7 @@ func InjectSplitPayload(request string,out flushWriter)(bool,error){
 		parts:=javaSplit(request,"[delay_split]")
 		for i,part:=range parts{
 			handled,err:=injectSimpleSplit(part,out);if err!=nil{return true,err}
-			if !handled{if _,err=out.Write(latin1(part));err!=nil{return true,err};if err=out.Flush();err!=nil{return true,err}}
+			if !handled{if _,err=out.Write(EncodeLatin1(part));err!=nil{return true,err};if err=out.Flush();err!=nil{return true,err}}
 			if i!=len(parts)-1{time.Sleep(time.Second)}
 		}
 		return true,nil
@@ -77,19 +76,20 @@ func InjectSplitPayload(request string,out flushWriter)(bool,error){
 func injectSimpleSplit(request string,out flushWriter)(bool,error){
 	if !strings.Contains(request,"[split]"){return false,nil}
 	for _,part:=range javaSplit(request,"[split]"){
-		if _,err:=out.Write(latin1(part));err!=nil{return true,err}
+		if _,err:=out.Write(EncodeLatin1(part));err!=nil{return true,err}
 		if err:=out.Flush();err!=nil{return true,err}
 	}
 	return true,nil
 }
 
 func javaSplit(value,separator string)[]string{
+	if value==""{return []string{""}}
 	parts:=strings.Split(value,separator)
 	for len(parts)>0&&parts[len(parts)-1]==""{parts=parts[:len(parts)-1]}
 	return parts
 }
 
-func latin1(value string)[]byte{
+func EncodeLatin1(value string)[]byte{
 	out:=make([]byte,0,len(value))
 	for _,r:=range value{if r>255{out=append(out,'?')}else{out=append(out,byte(r))}}
 	return out

@@ -45,6 +45,9 @@ type Profile struct {
 func ParseJSON(raw string)(Profile,error){
 	var p Profile
 	if err:=json.Unmarshal([]byte(raw),&p);err!=nil{return p,fmt.Errorf("decode profile: %w",err)}
+	var fields map[string]json.RawMessage
+	if err:=json.Unmarshal([]byte(raw),&fields);err!=nil{return p,err}
+	if _,ok:=fields["acceptAnyStatus"];!ok{p.AcceptAnyStatus=true}
 	return p,p.Validate()
 }
 
@@ -53,17 +56,23 @@ func ParseURI(raw string)(Profile,error){
 	if u.Scheme!="ssh"{return Profile{},errors.New("unsupported URI scheme")}
 	port:=u.Port();if port==""{port="22"}
 	n,err:=strconv.ParseUint(port,10,16);if err!=nil||n==0{return Profile{},errors.New("invalid SSH port")}
-	p:=Profile{Mode:ModeDirect,Host:u.Hostname(),Port:uint16(n)}
+	p:=Profile{Mode:ModeDirect,Host:u.Hostname(),Port:uint16(n),AcceptAnyStatus:true}
 	if u.User!=nil{p.Username=u.User.Username();p.Password,_=u.User.Password()}
 	q:=u.Query()
 	if q.Get("mode")!=""{p.Mode=Mode(q.Get("mode"))}
 	p.SNI=q.Get("sni");p.Payload=q.Get("payload");p.ProxyHost=q.Get("proxyHost")
 	if v:=q.Get("proxyPort");v!=""{x,e:=strconv.ParseUint(v,10,16);if e!=nil||x==0{return p,errors.New("invalid proxy port")};p.ProxyPort=uint16(x)}
+	if v:=q.Get("acceptAnyStatus");v!=""{p.AcceptAnyStatus=v!="false"}
+	p.VerifyTLS=q.Get("verifyTls")=="true"
+	p.TLSFingerprint=q.Get("tlsFingerprint")
+	p.HostKeySHA256=q.Get("hostKeySha256")
+	p.DisableDelaySSH=q.Get("disableDelaySSH")=="true"
+	if v:=q.Get("keepalive");v!=""{x,e:=strconv.Atoi(v);if e!=nil{return p,errors.New("invalid keepalive")};p.KeepAliveSeconds=x}
 	p.Name=u.Fragment
 	return p,p.Validate()
 }
 
-func (p Profile) Validate()error{
+func(p Profile)Validate()error{
 	if p.Mode==""{p.Mode=ModeDirect}
 	switch p.Mode{case ModeDirect,ModeProxy,ModeSSL,ModePayloadSSL:default:return fmt.Errorf("unsupported tunnel mode %q",p.Mode)}
 	if p.Host==""{return errors.New("SSH host is required")}
@@ -71,10 +80,7 @@ func (p Profile) Validate()error{
 	if net.ParseIP(p.Host)==nil&&strings.Contains(p.Host,":"){return errors.New("invalid SSH host")}
 	if p.Port==0{return errors.New("SSH port is required")}
 	if p.Username==""{return errors.New("SSH username is required")}
-	if p.Mode==ModeProxy||p.Mode==ModeSSL||p.Mode==ModePayloadSSL{
-		if p.ProxyHost==""||p.ProxyPort==0{return errors.New("proxy host and port are required for selected mode")}
-	}
-	if p.Mode==ModePayloadSSL&&p.Payload==""{return errors.New("payload is required for payload+ssl mode")}
+	if p.Mode==ModeProxy&&(p.ProxyHost==""||p.ProxyPort==0){return errors.New("proxy host and port are required for proxy mode")}
 	if p.KeepAliveSeconds<0||p.KeepAliveSeconds>3600{return errors.New("keepalive must be between 0 and 3600 seconds")}
 	return nil
 }
