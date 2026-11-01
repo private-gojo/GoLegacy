@@ -13,7 +13,7 @@ android {
         applicationId = "dev.go.core"
         minSdk = 29
         targetSdk = 37
-        versionCode = 1
+        versionCode = 644
         versionName = releaseVersionName
     }
 

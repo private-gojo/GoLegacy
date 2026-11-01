@@ -17,6 +17,7 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import org.json.JSONObject
+import dev.go.core.mobile.Bridge
 
 class MainActivity : Activity() {
     private lateinit var fields: LinearLayout
@@ -33,6 +34,9 @@ class MainActivity : Activity() {
     private lateinit var mode: Spinner
     private lateinit var status: TextView
     private var pendingProfile: String? = null
+    private var lockedProfileRaw: String? = null
+    private val hiddenProfileViews = mutableListOf<android.view.View>()
+    private val importBridge = Bridge()
     private var receiverRegistered = false
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -61,8 +65,16 @@ class MainActivity : Activity() {
                 listOf("Direct", "HTTP Proxy", "SSL", "Payload + SSL")
             )
         }
-        fields.addView(fieldLabel("Tunnel mode"))
+        val modeLabel = fieldLabel("Tunnel mode")
+        fields.addView(modeLabel)
         fields.addView(mode)
+        hiddenProfileViews.add(modeLabel)
+        hiddenProfileViews.add(mode)
+
+        fields.addView(Button(this).apply {
+            text = "Import legacy .sks"
+            setOnClickListener { chooseLegacyProfile() }
+        })
 
         host = input("SSH host")
         port = input("SSH port", "22")
@@ -122,6 +134,7 @@ class MainActivity : Activity() {
                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         fields.addView(edit)
+        hiddenProfileViews.add(edit)
         return edit
     }
 
@@ -161,12 +174,60 @@ class MainActivity : Activity() {
             .put("dnsResolver", dnsResolver.text.toString().trim())
             .toString()
 
-        pendingProfile = profile
+        val profileJson = lockedProfileRaw ?: profile
+        pendingProfile = profileJson
         val permission = VpnService.prepare(this)
         if (permission != null) {
             startActivityForResult(permission, VPN_PERMISSION_REQUEST)
         } else {
-            startVpnService(profile)
+            startVpnService(profileJson)
+        }
+    }
+
+    private fun chooseLegacyProfile() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .setType("*/*")
+            .addCategory(Intent.CATEGORY_OPENABLE)
+        startActivityForResult(intent, LEGACY_PROFILE_REQUEST)
+    }
+
+    private fun importLegacyProfile(uri: android.net.Uri) {
+        try {
+            val raw = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: error("Unable to read selected profile")
+            val result = JSONObject(importBridge.importSKS(raw, 644L, System.currentTimeMillis()))
+            val imported = result.getJSONObject("profile")
+            lockedProfileRaw = null
+            mode.setSelection(
+                when (imported.optString("mode")) {
+                    "proxy" -> 1
+                    "ssl" -> 2
+                    "payload+ssl" -> 3
+                    else -> 0
+                }
+            )
+            host.setText(imported.optString("host"))
+            port.setText(imported.optString("port", "22"))
+            username.setText(imported.optString("username"))
+            password.setText(imported.optString("password"))
+            proxyHost.setText(imported.optString("proxyHost"))
+            proxyPort.setText(imported.optString("proxyPort"))
+            sni.setText(imported.optString("sni"))
+            payload.setText(imported.optString("payload"))
+            udpResolver.setText(imported.optString("udpResolver", "127.0.0.1:7300"))
+            dnsResolver.setText(imported.optString("dnsResolver", "1.1.1.1"))
+
+            if (result.optBoolean("locked")) {
+                imported.put("blockRoot", result.optBoolean("blockRoot"))
+                lockedProfileRaw = imported.toString()
+                hiddenProfileViews.forEach { it.visibility = android.view.View.GONE }
+                status.text = result.optString("message").ifBlank { "Locked profile imported" }
+            } else {
+                hiddenProfileViews.forEach { it.visibility = android.view.View.VISIBLE }
+                status.text = "Legacy profile imported"
+            }
+        } catch (e: Exception) {
+            status.text = "Import failed: ${e.message ?: "invalid .sks profile"}"
         }
     }
 
@@ -193,6 +254,10 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Android")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == LEGACY_PROFILE_REQUEST && resultCode == RESULT_OK) {
+            data?.data?.let { importLegacyProfile(it) }
+            return
+        }
         if (requestCode == VPN_PERMISSION_REQUEST) {
             val profile = pendingProfile
             pendingProfile = null
@@ -206,5 +271,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val VPN_PERMISSION_REQUEST = 4101
+        private const val LEGACY_PROFILE_REQUEST = 4102
     }
 }
