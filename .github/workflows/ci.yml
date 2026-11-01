@@ -24,3 +24,30 @@ jobs:
         run: go test ./...
       - name: Vet
         run: go vet ./...
+
+  gomobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.3"
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK and NDK
+        run: sdkmanager "platforms;android-37" "build-tools;37.0.0" "ndk;30.0.16248370"
+      - name: Install gomobile
+        run: go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20261011034528-197770444867
+      - name: Initialize gomobile
+        run: gomobile init
+      - name: Bind Go core
+        run: gomobile bind -target=android -androidapi=21 -javapkg=dev.go.core -o app/libs/go-core.aar ./mobile
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-core-aar
+          path: app/libs/go-core.aar
+          if-no-files-found: error
