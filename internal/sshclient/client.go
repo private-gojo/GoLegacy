@@ -54,7 +54,9 @@ func(c *Client)Connect(p profile.Profile)error{
 		),
 		MACs: append(supported.MACs, ssh.InsecureHMACSHA196),
 	}
-	cfg:=&ssh.ClientConfig{Config:sshConfig,User:p.Username,Timeout:15*time.Second,ClientVersion:"SSH-2.0-TrileadSSH2Java_213",HostKeyCallback:hostKeyCallback(p)}
+	handshakeTimeout := time.Duration(p.HandshakeTimeoutMs) * time.Millisecond
+	if handshakeTimeout <= 0 { handshakeTimeout = 20 * time.Second }
+	cfg:=&ssh.ClientConfig{Config:sshConfig,User:p.Username,Timeout:handshakeTimeout,ClientVersion:"SSH-2.0-TrileadSSH2Java_213",HostKeyCallback:hostKeyCallback(p)}
 	if p.Password!=""{cfg.Auth=append(cfg.Auth,ssh.Password(p.Password))}
 	if p.PrivateKey!=""{
 		var signer ssh.Signer
@@ -63,8 +65,10 @@ func(c *Client)Connect(p profile.Profile)error{
 		cfg.Auth=append(cfg.Auth,ssh.PublicKeys(signer))
 	}
 	if len(cfg.Auth)==0{_=raw.Close();return errors.New("SSH password or private key is required")}
+	if err := raw.SetDeadline(time.Now().Add(handshakeTimeout)); err != nil { _ = raw.Close(); return err }
 	cc,chans,reqs,err:=ssh.NewClientConn(raw,net.JoinHostPort(p.Host,fmt.Sprint(p.Port)),cfg)
 	if err!=nil{_=raw.Close();return fmt.Errorf("SSH handshake: %w",err)}
+	_ = raw.SetDeadline(time.Time{})
 	c.mu.Lock()
 	if c.client!=nil{_=c.client.Close()}
 	if c.keepAliveStop!=nil{close(c.keepAliveStop)}
