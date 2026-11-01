@@ -21,6 +21,7 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import dev.go.core.mobile.Bridge
 
 class MainActivity : Activity() {
@@ -47,6 +48,7 @@ class MainActivity : Activity() {
     private lateinit var dnsForward: CheckBox
     private lateinit var disableDelaySSH: CheckBox
     private lateinit var status: TextView
+    private lateinit var exportButton: Button
     private var pendingProfile: String? = null
     private var lockedProfileRaw: String? = null
     private var importedBlockRoot = false
@@ -138,10 +140,11 @@ class MainActivity : Activity() {
             text = "Disconnect"
             setOnClickListener { disconnect() }
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        actions.addView(Button(this).apply {
+        exportButton = Button(this).apply {
             text = "Export locked"
             setOnClickListener { exportLockedURI() }
-        }, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        actions.addView(exportButton, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(actions)
         setContentView(root)
     }
@@ -305,17 +308,28 @@ class MainActivity : Activity() {
         if (result.optBoolean("locked")) {
             lockedProfileRaw = imported.toString()
             hiddenProfileViews.forEach { it.visibility = android.view.View.GONE }
+            exportButton.isEnabled = false
             status.text = result.optString("message").ifBlank { "Locked profile imported" }
         } else {
             hiddenProfileViews.forEach { it.visibility = android.view.View.VISIBLE }
+            exportButton.isEnabled = true
             status.text = "Profile imported"
         }
     }
 
     private fun importLegacyProfile(uri: android.net.Uri) {
         try {
-            val raw = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?: error("Unable to read selected profile")
+            val raw = contentResolver.openInputStream(uri)?.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (output.size() + count > 1_048_576) error("Legacy profile exceeds 1 MiB")
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray()
+            } ?: error("Unable to read selected profile")
             applyImportedConfig(JSONObject(importBridge.importSKS(raw, 644L, System.currentTimeMillis())))
         } catch (e: Exception) {
             status.text = "Import failed: ${e.message ?: "invalid .sks profile"}"
@@ -325,6 +339,7 @@ class MainActivity : Activity() {
     private fun resetProfile() {
         lockedProfileRaw = null
         importedBlockRoot = false
+        exportButton.isEnabled = true
         hiddenProfileViews.forEach { it.visibility = android.view.View.VISIBLE }
         mode.setSelection(0)
         host.setText("")

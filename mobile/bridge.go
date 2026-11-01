@@ -31,6 +31,11 @@ func NewBridge()*Bridge{return &Bridge{formatter:payload.NewFormatter()}}
 
 func(b *Bridge)SetSocketProtector(p SocketProtector){b.mu.Lock();defer b.mu.Unlock();b.protector=p}
 
+func (b *Bridge) ValidateProfile(profileJSON string) error {
+	_, err := profile.ParseJSON(profileJSON)
+	return err
+}
+
 func(b *Bridge)Connect(profileJSON string)error{
 	p,err:=profile.ParseJSON(profileJSON);if err!=nil{return err}
 	b.mu.Lock();protector:=b.protector;formatter:=b.formatter;b.mu.Unlock()
