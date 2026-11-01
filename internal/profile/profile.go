@@ -72,6 +72,7 @@ func ParseURI(raw string)(Profile,error){
 	if q.Get("mode")!=""{p.Mode=Mode(q.Get("mode"))}
 	p.SNI=q.Get("sni");p.Payload=q.Get("payload");p.ProxyHost=q.Get("proxyHost")
 	if v:=q.Get("proxyPort");v!=""{x,e:=strconv.ParseUint(v,10,16);if e!=nil||x==0{return p,errors.New("invalid proxy port")};p.ProxyPort=uint16(x)}
+	if v:=q.Get("localSocksPort");v!=""{x,e:=strconv.ParseUint(v,10,16);if e!=nil||x==0{return p,errors.New("invalid local SOCKS port")};p.LocalSocksPort=uint16(x)}
 	if v:=q.Get("acceptAnyStatus");v!=""{p.AcceptAnyStatus=v!="false"}
 	p.VerifyTLS=q.Get("verifyTls")=="true";p.TLSFingerprint=q.Get("tlsFingerprint");p.HostKeySHA256=q.Get("hostKeySha256")
 	p.DisableDelaySSH=q.Get("disableDelaySSH")=="true"

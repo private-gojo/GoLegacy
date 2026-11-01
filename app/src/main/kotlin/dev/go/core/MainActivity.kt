@@ -28,6 +28,7 @@ class MainActivity : Activity() {
     private lateinit var fields: LinearLayout
     private lateinit var host: EditText
     private lateinit var port: EditText
+    private lateinit var localSocksPort: EditText
     private lateinit var username: EditText
     private lateinit var password: EditText
     private lateinit var privateKey: EditText
@@ -107,6 +108,7 @@ class MainActivity : Activity() {
 
         host = input("SSH host")
         port = input("SSH port", "22")
+        localSocksPort = input("Local SOCKS port", "1080")
         username = input("SSH username")
         password = input("SSH password", password = true)
         privateKey = multiInput("SSH private key")
@@ -229,6 +231,7 @@ class MainActivity : Activity() {
             .put("mode", selectedMode)
             .put("host", host.text.toString().trim())
             .put("port", port.text.toString().toIntOrNull() ?: 22)
+            .put("localSocksPort", localSocksPort.text.toString().toIntOrNull() ?: 1080)
             .put("username", username.text.toString())
             .put("password", password.text.toString())
             .put("privateKey", privateKey.text.toString())
@@ -286,6 +289,7 @@ class MainActivity : Activity() {
         )
         host.setText(imported.optString("host"))
         port.setText(imported.optString("port", "22"))
+        localSocksPort.setText(imported.optString("localSocksPort", "1080"))
         username.setText(imported.optString("username"))
         password.setText(imported.optString("password"))
         privateKey.setText(imported.optString("privateKey"))
@@ -344,6 +348,7 @@ class MainActivity : Activity() {
         mode.setSelection(0)
         host.setText("")
         port.setText("22")
+        localSocksPort.setText("1080")
         username.setText("")
         password.setText("")
         privateKey.setText("")

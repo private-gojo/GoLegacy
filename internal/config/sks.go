@@ -108,6 +108,7 @@ func ImportSKS(raw []byte, appVersionCode int, now time.Time) (Imported, error) 
 	if value, ok := props["disableDelaySSH"]; ok { disableDelaySSH = value == "1" }
 	p := profile.Profile{
 		Name: props["profileName"], Mode: mode, Host: host, Port: port,
+		LocalSocksPort: uint16(localPort),
 		Username: username, Password: props["sshPass"],
 		ProxyHost: props["proxyRemoto"], ProxyPort: proxyPort,
 		SNI: props["sslSNI"], Payload: payloadText,

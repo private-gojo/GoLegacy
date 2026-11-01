@@ -47,3 +47,15 @@ func TestJSONDefaultsTCPNoDelayToLegacySetting(t *testing.T) {
 	if err!=nil{t.Fatal(err)}
 	if !p.DisableDelaySSH{t.Fatal("legacy TCP_NODELAY default should be enabled")}
 }
+
+func TestLocalSocksPortDefaultsToLegacy(t *testing.T) {
+	p, err := ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u"}`)
+	if err != nil { t.Fatal(err) }
+	if p.LocalSocksPort != 1080 { t.Fatalf("local SOCKS port=%d, want 1080", p.LocalSocksPort) }
+}
+
+func TestSSHURIImportsLocalSocksPort(t *testing.T) {
+	p, err := ParseURI("ssh://user:pass@ssh.example.test:22?localSocksPort=2080")
+	if err != nil { t.Fatal(err) }
+	if p.LocalSocksPort != 2080 { t.Fatalf("local SOCKS port=%d, want 2080", p.LocalSocksPort) }
+}
