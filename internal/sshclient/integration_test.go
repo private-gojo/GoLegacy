@@ -2,6 +2,7 @@ package sshclient
 
 import (
 	"bufio"
+	"encoding/binary"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -14,6 +15,9 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"dev.go.core/internal/profile"
+	"dev.go.core/internal/socks5"
 
 	"dev.go.core/internal/profile"
 )
@@ -189,4 +193,81 @@ func startTLSBridge(t *testing.T, target string, expectHTTP bool) string {
 		}
 	}()
 	return listener.Addr().String()
+}
+
+func TestDNSOverTCPThroughSSH(t *testing.T) {
+	username := os.Getenv("SSH_TEST_USERNAME")
+	password := os.Getenv("SSH_TEST_PASSWORD")
+	portText := os.Getenv("SSH_TEST_PORT")
+	if username == "" || password == "" || portText == "" {
+		t.Skip("SSH integration environment not configured")
+	}
+	sshPort, err := strconv.Atoi(portText)
+	if err != nil { t.Fatal(err) }
+
+	dnsListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil { t.Fatal(err) }
+	defer dnsListener.Close()
+	dnsPort := dnsListener.Addr().(*net.TCPAddr).Port
+	query := []byte{0x12, 0x34, 1, 0, 0, 1}
+	response := []byte{0x12, 0x34, 0x81, 0x80, 0, 1}
+	dnsDone := make(chan error, 1)
+	go func() {
+		conn, err := dnsListener.Accept()
+		if err != nil { dnsDone <- err; return }
+		defer conn.Close()
+		var length [2]byte
+		if _, err = io.ReadFull(conn, length[:]); err != nil { dnsDone <- err; return }
+		packet := make([]byte, int(binary.BigEndian.Uint16(length[:])))
+		if _, err = io.ReadFull(conn, packet); err != nil { dnsDone <- err; return }
+		if !bytes.Equal(packet, query) { dnsDone <- errors.New("DNS query mismatch"); return }
+		binary.BigEndian.PutUint16(length[:], uint16(len(response)))
+		if _, err = conn.Write(length[:]); err != nil { dnsDone <- err; return }
+		_, err = conn.Write(response)
+		dnsDone <- err
+	}()
+
+	client := &Client{}
+	profile := profile.Profile{
+		Mode: profile.ModeDirect, Host: "127.0.0.1", Port: uint16(sshPort),
+		Username: username, Password: password, KeepAliveSeconds: 0,
+	}
+	if err := client.Connect(profile); err != nil { t.Fatalf("SSH connect: %v", err) }
+	defer client.Close()
+
+	server := &socks5.Server{
+		Addr: "127.0.0.1:0", Dial: client.Dial,
+		DNSForward: true, DNSResolver: "127.0.0.1", DNSPort: uint16(dnsPort),
+		UDPOnlyDNS: true,
+	}
+	if err := server.Start(); err != nil { t.Fatal(err) }
+	defer server.Close()
+
+	control, err := net.Dial("tcp", server.AddrString())
+	if err != nil { t.Fatal(err) }
+	defer control.Close()
+	if _, err = control.Write([]byte{5, 1, 0}); err != nil { t.Fatal(err) }
+	method := make([]byte, 2)
+	if _, err = io.ReadFull(control, method); err != nil || method[0] != 5 || method[1] != 0 {
+		t.Fatalf("SOCKS5 greeting failed: %v %v", method, err)
+	}
+	if _, err = control.Write([]byte{5, 3, 0, 1, 0, 0, 0, 0, 0, 0}); err != nil { t.Fatal(err) }
+	bound := make([]byte, 10)
+	if _, err = io.ReadFull(control, bound); err != nil { t.Fatal(err) }
+	if bound[1] != 0 { t.Fatalf("UDP association failed: %v", bound) }
+	relayPort := int(binary.BigEndian.Uint16(bound[8:10]))
+	udp, err := net.DialUDP("udp4", nil, &net.UDPAddr{IP: net.IPv4(127,0,0,1), Port: relayPort})
+	if err != nil { t.Fatal(err) }
+	defer udp.Close()
+	_ = udp.SetDeadline(time.Now().Add(5*time.Second))
+	request := []byte{0,0,0,1,1,1,1,1,0,53}
+	request = append(request, query...)
+	if _, err = udp.Write(request); err != nil { t.Fatal(err) }
+	packet := make([]byte, 2048)
+	n, err := udp.Read(packet)
+	if err != nil { t.Fatal(err) }
+	if n < 10 || packet[3] != 1 || !bytes.Equal(packet[10:n], response) {
+		t.Fatalf("unexpected SOCKS5 DNS response: %v", packet[:n])
+	}
+	if err := <-dnsDone; err != nil { t.Fatal(err) }
 }
