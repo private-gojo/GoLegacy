@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"dev.go.core/internal/payload"
 	"dev.go.core/internal/profile"
 	"dev.go.core/internal/transport"
 )
@@ -21,52 +22,58 @@ type Client struct {
 	conn net.Conn
 	client *ssh.Client
 	Protect func(fd int) bool
+	Formatter *payload.Formatter
+	keepAliveStop chan struct{}
 }
 
-func (c *Client) Connect(p profile.Profile) error {
-	d := &transport.Dialer{Protect:c.Protect}
-	raw, err := d.Dial(p)
-	if err != nil { return err }
-	cfg := &ssh.ClientConfig{User:p.Username, Timeout:15*time.Second, HostKeyCallback:hostKeyCallback(p)}
-	if p.Password != "" { cfg.Auth = append(cfg.Auth, ssh.Password(p.Password)) }
-	if p.PrivateKey != "" {
+func(c *Client)Connect(p profile.Profile)error{
+	d:=&transport.Dialer{Protect:c.Protect,Formatter:c.Formatter}
+	raw,err:=d.Dial(p);if err!=nil{return err}
+	cfg:=&ssh.ClientConfig{Config:ssh.Config{},User:p.Username,Timeout:15*time.Second,ClientVersion:"SSH-2.0-TrileadSSH2Java_213",HostKeyCallback:hostKeyCallback(p)}
+	if p.Password!=""{cfg.Auth=append(cfg.Auth,ssh.Password(p.Password))}
+	if p.PrivateKey!=""{
 		var signer ssh.Signer
-		if p.Passphrase != "" { signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(p.PrivateKey), []byte(p.Passphrase)) } else { signer, err = ssh.ParsePrivateKey([]byte(p.PrivateKey)) }
-		if err != nil { _=raw.Close(); return fmt.Errorf("parse SSH private key: %w",err) }
-		cfg.Auth = append(cfg.Auth,ssh.PublicKeys(signer))
+		if p.Passphrase!=""{signer,err=ssh.ParsePrivateKeyWithPassphrase([]byte(p.PrivateKey),[]byte(p.Passphrase))}else{signer,err=ssh.ParsePrivateKey([]byte(p.PrivateKey))}
+		if err!=nil{_=raw.Close();return fmt.Errorf("parse SSH private key: %w",err)}
+		cfg.Auth=append(cfg.Auth,ssh.PublicKeys(signer))
 	}
-	if len(cfg.Auth)==0 { _=raw.Close(); return errors.New("SSH password or private key is required") }
-	cc, chans, reqs, err := ssh.NewClientConn(raw, net.JoinHostPort(p.Host, fmt.Sprint(p.Port)), cfg)
-	if err != nil { _=raw.Close(); return fmt.Errorf("SSH handshake: %w",err) }
+	if len(cfg.Auth)==0{_=raw.Close();return errors.New("SSH password or private key is required")}
+	cc,chans,reqs,err:=ssh.NewClientConn(raw,net.JoinHostPort(p.Host,fmt.Sprint(p.Port)),cfg)
+	if err!=nil{_=raw.Close();return fmt.Errorf("SSH handshake: %w",err)}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.client!=nil { _=c.client.Close() }
-	c.conn=raw
-	c.client=ssh.NewClient(cc,chans,reqs)
+	if c.client!=nil{_=c.client.Close()}
+	if c.keepAliveStop!=nil{close(c.keepAliveStop)}
+	c.conn=raw;c.client=ssh.NewClient(cc,chans,reqs);c.keepAliveStop=nil
+	client:=c.client
+	if p.KeepAliveSeconds>0{stop:=make(chan struct{});c.keepAliveStop=stop;go keepAlive(client,stop,time.Duration(p.KeepAliveSeconds)*time.Second)}
+	c.mu.Unlock()
 	return nil
 }
 
-func hostKeyCallback(p profile.Profile) ssh.HostKeyCallback {
-	if p.HostKeySHA256 == "" { return func(_ string,_ net.Addr,_ ssh.PublicKey) error { return nil } }
-	return func(_ string,_ net.Addr,key ssh.PublicKey) error {
-		sum:=sha256.Sum256(key.Marshal())
-		got:=base64.RawStdEncoding.EncodeToString(sum[:])
-		want:=strings.TrimPrefix(p.HostKeySHA256,"SHA256:")
-		if got!=want { return errors.New("SSH host key fingerprint mismatch") }
-		return nil
+func keepAlive(client *ssh.Client,stop <-chan struct{},interval time.Duration){
+	t:=time.NewTicker(interval);defer t.Stop()
+	for{select{case<-stop:return;case<-t.C:_,_,_=client.SendRequest("keepalive@openssh.com",true,nil)}}
+}
+
+func hostKeyCallback(p profile.Profile)ssh.HostKeyCallback{
+	if p.HostKeySHA256==""{return func(_ string,_ net.Addr,_ ssh.PublicKey)error{return nil}}
+	return func(_ string,_ net.Addr,key ssh.PublicKey)error{
+		sum:=sha256.Sum256(key.Marshal());got:=base64.RawStdEncoding.EncodeToString(sum[:]);want:=strings.TrimPrefix(p.HostKeySHA256,"SHA256:")
+		if got!=want{return errors.New("SSH host key fingerprint mismatch")};return nil
 	}
 }
 
-func (c *Client) Dial(network, address string)(net.Conn,error) {
-	c.mu.Lock(); client:=c.client; c.mu.Unlock()
-	if client==nil { return nil,errors.New("SSH client is not connected") }
+func(c *Client)Dial(network,address string)(net.Conn,error){
+	c.mu.Lock();client:=c.client;c.mu.Unlock()
+	if client==nil{return nil,errors.New("SSH client is not connected")}
 	return client.Dial(network,address)
 }
 
-func (c *Client) Close() error {
-	c.mu.Lock(); defer c.mu.Unlock()
+func(c *Client)Close()error{
+	c.mu.Lock();defer c.mu.Unlock()
+	if c.keepAliveStop!=nil{close(c.keepAliveStop);c.keepAliveStop=nil}
 	var err error
-	if c.client!=nil { err=c.client.Close(); c.client=nil }
-	if c.conn!=nil { _=c.conn.Close(); c.conn=nil }
+	if c.client!=nil{err=c.client.Close();c.client=nil}
+	if c.conn!=nil{_=c.conn.Close();c.conn=nil}
 	return err
 }

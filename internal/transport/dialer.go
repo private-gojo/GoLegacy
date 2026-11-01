@@ -1,6 +1,8 @@
 package transport
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -24,7 +26,7 @@ type Dialer struct {
 	Formatter *payload.Formatter
 }
 
-func (d *Dialer) Dial(p profile.Profile) (net.Conn,error) {
+func (d *Dialer) Dial(p profile.Profile)(net.Conn,error){
 	if err:=p.Validate();err!=nil{return nil,err}
 	timeout:=p.ConnectTimeout;if timeout<=0{timeout=15*time.Second}
 	d.Base.Timeout=timeout
@@ -54,7 +56,11 @@ func (d *Dialer) Dial(p profile.Profile) (net.Conn,error) {
 	if p.Payload!=""{
 		formatter:=d.Formatter;if formatter==nil{formatter=payload.NewFormatter()}
 		data:=formatter.Format(p.Payload,payload.Context{Host:p.Host,Port:p.Port,Protocol:"HTTP/1.0"})
-		if _,err:=conn.Write(data);err!=nil{return fail(err)}
+		if bytes.Contains(data,[]byte("[split]"))||bytes.Contains(data,[]byte("[delay_split]")){
+			writer:=bufio.NewWriter(conn)
+			handled,e:=payload.InjectSplitPayload(string(data),writer);if e!=nil{return fail(e)}
+			if !handled{if _,e=writer.Write(data);e!=nil{return fail(e)};if e=writer.Flush();e!=nil{return fail(e)}}
+		}else if _,err=conn.Write(data);err!=nil{return fail(err)}
 		if err:=readPayloadResponse(conn,p.AcceptAnyStatus);err!=nil{return fail(err)}
 	}else if p.Mode==profile.ModeProxy||p.Mode==profile.ModeSSL{
 		target:=net.JoinHostPort(p.Host,strconv.Itoa(int(p.Port)))

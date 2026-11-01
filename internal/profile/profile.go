@@ -38,17 +38,17 @@ type Profile struct {
 	TLSFingerprint string `json:"tlsFingerprint,omitempty"`
 	HostKeySHA256 string `json:"hostKeySha256,omitempty"`
 	DisableDelaySSH bool `json:"disableDelaySSH"`
-	KeepAlive time.Duration `json:"keepAlive,omitempty"`
+	KeepAliveSeconds int `json:"keepAliveSeconds,omitempty"`
 	ConnectTimeout time.Duration `json:"connectTimeout,omitempty"`
 }
 
-func ParseJSON(raw string) (Profile,error) {
+func ParseJSON(raw string)(Profile,error){
 	var p Profile
 	if err:=json.Unmarshal([]byte(raw),&p);err!=nil{return p,fmt.Errorf("decode profile: %w",err)}
 	return p,p.Validate()
 }
 
-func ParseURI(raw string) (Profile,error) {
+func ParseURI(raw string)(Profile,error){
 	u,err:=url.Parse(raw);if err!=nil{return Profile{},err}
 	if u.Scheme!="ssh"{return Profile{},errors.New("unsupported URI scheme")}
 	port:=u.Port();if port==""{port="22"}
@@ -63,17 +63,18 @@ func ParseURI(raw string) (Profile,error) {
 	return p,p.Validate()
 }
 
-func (p Profile) Validate() error {
+func (p Profile) Validate()error{
 	if p.Mode==""{p.Mode=ModeDirect}
 	switch p.Mode{case ModeDirect,ModeProxy,ModeSSL,ModePayloadSSL:default:return fmt.Errorf("unsupported tunnel mode %q",p.Mode)}
 	if p.Host==""{return errors.New("SSH host is required")}
 	if strings.ContainsAny(p.Host," /\\"){return errors.New("invalid SSH host")}
-	if net.ParseIP(p.Host)==nil && strings.Contains(p.Host,":"){return errors.New("invalid SSH host")}
+	if net.ParseIP(p.Host)==nil&&strings.Contains(p.Host,":"){return errors.New("invalid SSH host")}
 	if p.Port==0{return errors.New("SSH port is required")}
 	if p.Username==""{return errors.New("SSH username is required")}
 	if p.Mode==ModeProxy||p.Mode==ModeSSL||p.Mode==ModePayloadSSL{
 		if p.ProxyHost==""||p.ProxyPort==0{return errors.New("proxy host and port are required for selected mode")}
 	}
 	if p.Mode==ModePayloadSSL&&p.Payload==""{return errors.New("payload is required for payload+ssl mode")}
+	if p.KeepAliveSeconds<0||p.KeepAliveSeconds>3600{return errors.New("keepalive must be between 0 and 3600 seconds")}
 	return nil
 }
