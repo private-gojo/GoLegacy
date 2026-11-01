@@ -67,10 +67,8 @@ func(d *Dialer)Dial(p profile.Profile)(net.Conn,error){
 	case profile.ModeSSL:
 		// TLS wraps the SSH endpoint directly; no HTTP CONNECT is sent.
 	case profile.ModePayloadSSL:
-		data:=p.Payload
-		if data==""{data=defaultConnect(p.Host,p.Port)}
-		if data==defaultConnect(p.Host,p.Port){
-			if err:=writeAndCheck(conn,[]byte(data),p.AcceptAnyStatus);err!=nil{return fail(err)}
+		if p.Payload==""{
+			if err:=writeAndCheck(conn,defaultConnect(p.Host,p.Port),p.AcceptAnyStatus);err!=nil{return fail(err)}
 		}else{
 			if err:=d.sendPayload(conn,p);err!=nil{return fail(err)}
 			if err:=readPayloadResponse(conn,p.AcceptAnyStatus);err!=nil{return fail(err)}
@@ -93,8 +91,7 @@ func(d *Dialer)sendPayload(conn net.Conn,p profile.Profile)error{
 }
 
 func defaultConnect(host string,port uint16)[]byte{
-	target:=net.JoinHostPort(host,strconv.Itoa(int(port)))
-	return []byte("CONNECT "+target+" HTTP/1.0\r\n\r\n")
+	return []byte("CONNECT "+host+":"+strconv.Itoa(int(port))+" HTTP/1.0\r\n\r\n")
 }
 
 func writeAndCheck(conn net.Conn,data []byte,acceptAny bool)error{
