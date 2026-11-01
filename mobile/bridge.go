@@ -61,6 +61,24 @@ func(b *Bridge)Close()error{
 }
 
 
+
+func (b *Bridge) ImportLockedURI(uri, passcode string, nowUnixMilli int64) (string, error) {
+	imported, err := config.DecodeLockedURI(uri, passcode, time.UnixMilli(nowUnixMilli))
+	if err != nil { return "", err }
+	encoded, err := json.Marshal(imported)
+	if err != nil { return "", err }
+	return string(encoded), nil
+}
+
+func (b *Bridge) ExportLockedURI(profileJSON string, expiryUnixMilli int64, message string, blockRoot bool, passcode string) (string, error) {
+	p, err := profile.ParseJSON(profileJSON)
+	if err != nil { return "", err }
+	return config.EncodeLockedURI(config.LockedConfig{
+		Profile: p, Locked: true, ExpiryUnixMilli: expiryUnixMilli,
+		Message: message, BlockRoot: blockRoot,
+	}, passcode)
+}
+
 func (b *Bridge) ImportSKS(raw []byte, appVersionCode int, nowUnixMilli int64) (string, error) {
 	imported, err := config.ImportSKS(raw, appVersionCode, time.UnixMilli(nowUnixMilli))
 	if err != nil { return "", err }
