@@ -118,3 +118,11 @@ func TestRouteExclusionsRequireIPv4(t *testing.T) {
 	p := Profile{Mode: ModeDirect, Host: "ssh.example", Port: 22, Username: "u", Password: "p", ExcludeIPs: []string{"2001:db8::1"}}
 	if err := p.Validate(); err == nil { t.Fatal("IPv6 address accepted in IPv4 exclusion list") }
 }
+
+func TestSSHTimeoutsMatchLegacyDefaults(t *testing.T) {
+	p, err := ParseJSON(`{"mode":"direct","host":"ssh.example","port":22,"username":"u","password":"p"}`)
+	if err != nil { t.Fatal(err) }
+	if p.ConnectTimeoutMs != 10000 || p.HandshakeTimeoutMs != 20000 {
+		t.Fatalf("timeouts connect=%d handshake=%d", p.ConnectTimeoutMs, p.HandshakeTimeoutMs)
+	}
+}
