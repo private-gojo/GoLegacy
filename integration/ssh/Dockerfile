@@ -7,9 +7,7 @@ RUN apt-get update \
 RUN useradd --create-home --shell /bin/sh tunnel \
     && echo 'tunnel:test-only-password' | chpasswd \
     && mkdir -p /run/sshd /etc/dropbear \
-    && ssh-keygen -A \
-    && dropbearkey -t ed25519 -f /etc/dropbear/dropbear_ed25519_host_key \
-    && dropbearkey -t rsa -s 2048 -f /etc/dropbear/dropbear_rsa_host_key
+    && ssh-keygen -A
 
 RUN printf '%s\n' \
     'PasswordAuthentication yes' \
