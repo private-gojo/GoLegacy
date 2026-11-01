@@ -57,7 +57,16 @@ func(c *Client)Connect(p profile.Profile)error{
 	handshakeTimeout := time.Duration(p.HandshakeTimeoutMs) * time.Millisecond
 	if handshakeTimeout <= 0 { handshakeTimeout = 20 * time.Second }
 	cfg:=&ssh.ClientConfig{Config:sshConfig,User:p.Username,Timeout:handshakeTimeout,ClientVersion:"SSH-2.0-TrileadSSH2Java_213",HostKeyCallback:hostKeyCallback(p)}
-	if p.Password!=""{cfg.Auth=append(cfg.Auth,ssh.Password(p.Password))}
+	if p.Password!=""{
+		cfg.Auth=append(cfg.Auth,
+			ssh.Password(p.Password),
+			ssh.KeyboardInteractive(func(_, _ string, questions []string, _ []bool)([]string,error){
+				answers:=make([]string,len(questions))
+				for i:=range questions{answers[i]=p.Password}
+				return answers,nil
+			}),
+		)
+	}
 	if p.PrivateKey!=""{
 		var signer ssh.Signer
 		if p.Passphrase!=""{signer,err=ssh.ParsePrivateKeyWithPassphrase([]byte(p.PrivateKey),[]byte(p.Passphrase))}else{signer,err=ssh.ParsePrivateKey([]byte(p.PrivateKey))}
