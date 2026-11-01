@@ -20,17 +20,25 @@ class GoVpnService : VpnService() {
     private val bridge = Bridge()
     @Volatile private var tun: ParcelFileDescriptor? = null
     @Volatile private var running = false
+    @Volatile private var stopRequested = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, notification())
+        startForeground(NOTIFICATION_ID, notification("Starting tunnel"))
         when (intent?.action) {
-            ACTION_DISCONNECT -> worker.execute { stopTunnel() }
+            ACTION_DISCONNECT -> {
+                stopRequested = true
+                worker.execute { stopTunnel() }
+            }
             ACTION_CONNECT -> {
                 val raw = intent.getStringExtra(EXTRA_PROFILE)
+                stopRequested = true
                 if (raw.isNullOrBlank()) {
-                    stopTunnel()
+                    worker.execute { stopTunnel() }
                 } else {
-                    worker.execute { startTunnel(raw) }
+                    worker.execute {
+                        stopRequested = false
+                        startTunnel(raw)
+                    }
                 }
             }
         }
@@ -38,53 +46,67 @@ class GoVpnService : VpnService() {
     }
 
     private fun startTunnel(raw: String) {
-        stopTunnel()
-        try {
-            bridge.setSocketProtector(object : SocketProtector {
-                override fun protect(fd: Int): Boolean = this@GoVpnService.protect(fd)
-            })
-            bridge.connect(raw)
-            val profile = JSONObject(raw)
-            val socks = bridge.socksAddress()
-            val parts = socks.substringAfterLast(':').toIntOrNull()
-                ?: error("Invalid local SOCKS5 endpoint")
-            val dns = profile.optString("dnsResolver", "1.1.1.1").ifBlank { "1.1.1.1" }
-
-            val descriptor = Builder()
-                .setSession("Go")
-                .setMtu(1500)
-                .addAddress("198.18.0.1", 32)
-                .addRoute("0.0.0.0", 0)
-                .addDnsServer(dns)
-                .establish() ?: error("VPN interface creation was denied")
-            tun = descriptor
-
-            val config = File(cacheDir, "hev-socks5.yml")
-            config.writeText(
-                "tunnel:\n" +
-                "  name: tun0\n" +
-                "  mtu: 1500\n" +
-                "  ipv4: 198.18.0.1\n" +
-                "socks5:\n" +
-                "  address: 127.0.0.1\n" +
-                "  port: $parts\n" +
-                "  udp: 'udp'\n" +
-                "misc:\n" +
-                "  log-level: warn\n"
-            )
-            check(TProxyService.TProxyStartService(config.absolutePath, descriptor.fd)) {
-                "HEV tunnel failed to start"
+        var retryDelay = 1_000L
+        while (!stopRequested) {
+            try {
+                startTunnelOnce(raw)
+                return
+            } catch (e: Exception) {
+                cleanupTunnel()
+                broadcastStatus("retrying", e.message ?: "Connection failed")
+                updateNotification("Reconnecting in ${retryDelay / 1000}s")
+                var elapsed = 0L
+                while (elapsed < retryDelay && !stopRequested) {
+                    Thread.sleep(250)
+                    elapsed += 250
+                }
+                retryDelay = (retryDelay * 2).coerceAtMost(30_000L)
             }
-            running = true
-            updateNotification("Go VPN connected")
-            broadcastStatus("connected", "VPN connected")
-        } catch (e: Exception) {
-            stopTunnel()
-            broadcastStatus("error", e.message ?: "Tunnel startup failed")
         }
     }
 
-    private fun stopTunnel() {
+    private fun startTunnelOnce(raw: String) {
+        bridge.setSocketProtector(object : SocketProtector {
+            override fun protect(fd: Int): Boolean = this@GoVpnService.protect(fd)
+        })
+        bridge.connect(raw)
+        val profile = JSONObject(raw)
+        val socks = bridge.socksAddress()
+        val port = socks.substringAfterLast(':').toIntOrNull()
+            ?: error("Invalid local SOCKS5 endpoint")
+        val dns = profile.optString("dnsResolver", "1.1.1.1").ifBlank { "1.1.1.1" }
+
+        val descriptor = Builder()
+            .setSession("Go")
+            .setMtu(1500)
+            .addAddress("198.18.0.1", 32)
+            .addRoute("0.0.0.0", 0)
+            .addDnsServer(dns)
+            .establish() ?: error("VPN interface creation was denied")
+        tun = descriptor
+
+        val config = File(cacheDir, "hev-socks5.yml")
+        config.writeText(
+            "tunnel:\n" +
+            "  name: tun0\n" +
+            "  mtu: 1500\n" +
+            "  ipv4: 198.18.0.1\n" +
+            "socks5:\n" +
+            "  address: 127.0.0.1\n" +
+            "  port: $port\n" +
+            "  udp: 'udp'\n" +
+            "misc:\n" +
+            "  log-level: warn\n"
+        )
+        check(TProxyService.TProxyStartService(config.absolutePath, descriptor.fd)) {
+            "HEV tunnel failed to start"
+        }
+        running = true
+        updateNotification("Go VPN connected")
+        broadcastStatus("connected", "VPN connected")
+    }
+
+    private fun cleanupTunnel() {
         if (running || TProxyService.TProxyIsRunning()) {
             TProxyService.TProxyStopService()
         }
@@ -92,13 +114,18 @@ class GoVpnService : VpnService() {
         try { tun?.close() } catch (_: Exception) {}
         tun = null
         try { bridge.close() } catch (_: Exception) {}
+    }
+
+    private fun stopTunnel() {
+        stopRequested = true
+        cleanupTunnel()
         updateNotification("Go VPN disconnected")
         broadcastStatus("disconnected", "VPN disconnected")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
-    private fun notification(): Notification {
+    private fun notification(text: String): Notification {
         val channelId = "go_vpn"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(NotificationManager::class.java)
@@ -119,19 +146,15 @@ class GoVpnService : VpnService() {
         return builder
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle("Go VPN")
-            .setContentText("Starting tunnel")
+            .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)
             .build()
     }
 
     private fun updateNotification(text: String) {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, notification().also {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                it.extras.putString(Notification.EXTRA_TEXT, text)
-            }
-        })
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID, notification(text))
     }
 
     private fun broadcastStatus(state: String, message: String) {
@@ -144,12 +167,14 @@ class GoVpnService : VpnService() {
     }
 
     override fun onRevoke() {
+        stopRequested = true
         worker.execute { stopTunnel() }
         super.onRevoke()
     }
 
     override fun onDestroy() {
-        worker.execute { stopTunnel() }
+        stopRequested = true
+        worker.execute { cleanupTunnel() }
         worker.shutdown()
         super.onDestroy()
     }
