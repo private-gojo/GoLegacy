@@ -93,9 +93,20 @@ func(s *Server)handleConnect(c net.Conn,host string,port uint16){
 	_,_=c.Write([]byte{5,0,0,1,0,0,0,0,0,0})
 	_=c.SetDeadline(time.Time{});_=up.SetDeadline(time.Time{})
 	done:=make(chan struct{},1)
-	go func(){_,_=io.Copy(up,c);done<-struct{}{}}()
+	go func(){_,_=io.Copy(up,idleReadConn{Conn:c,timeout:6*time.Minute});done<-struct{}{}}()
 	_,_=io.Copy(c,up)
 	<-done
+}
+
+
+type idleReadConn struct {
+	net.Conn
+	timeout time.Duration
+}
+
+func (c idleReadConn) Read(p []byte) (int, error) {
+	_ = c.Conn.SetReadDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Read(p)
 }
 
 func(s *Server)handleUDPAssociate(control net.Conn,requestedHost string,requestedPort uint16){
