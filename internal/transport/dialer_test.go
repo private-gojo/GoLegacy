@@ -11,7 +11,7 @@ import (
 )
 
 func TestProfileRejectsMissingProxy(t *testing.T) {
-	p := profile.Profile{Mode:profile.ModeSSL, Host:"ssh.example", Port:22, Username:"u"}
+	p := profile.Profile{Mode:profile.ModeProxy, Host:"ssh.example", Port:22, Username:"u"}
 	if err := p.Validate(); err == nil { t.Fatal("expected proxy validation error") }
 }
 

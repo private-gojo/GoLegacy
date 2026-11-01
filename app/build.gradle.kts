@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "dev.go.core"
-        minSdk = 21
+        minSdk = 29
         targetSdk = 37
         versionCode = 1
         versionName = releaseVersionName
