@@ -154,7 +154,10 @@ class GoVpnService : VpnService() {
         if (!dnsForward) excludedRoutes.add("$dns/32")
         if (Build.VERSION.SDK_INT >= 33) {
             builder.addRoute("0.0.0.0", 0)
-            excludedRoutes.forEach { builder.excludeRoute(IpPrefix(it)) }
+            excludedRoutes.forEach { route ->
+                val parts = route.split("/")
+                builder.excludeRoute(IpPrefix(InetAddress.getByName(parts[0]), parts[1].toInt()))
+            }
         } else {
             addIpv4RoutesExcluding(builder, excludedRoutes)
         }
