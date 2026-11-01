@@ -1,0 +1,59 @@
+name: Trilead Build 213 Source Audit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/trilead-source-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pinned Legacy-Evolved baseline
+        uses: actions/checkout@v4
+        with:
+          repository: private-gojo/Legacy-Evolved
+          ref: 3d0b1838c0978051fb779a18bab37ac7a21e701f
+          path: Legacy-Evolved
+
+      - name: Download and verify upstream Trilead build213
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/trilead-ssh2-build213.zip"
+          curl -fL --retry 3 \
+            "https://sourceforge.net/projects/orion-ssh2/files/Trilead-SSH2/trilead-ssh2-build213.zip/download" \
+            -o "$archive"
+          echo "12159627166ff0e51d4ddcd546c568492b0f461a89214a0f014eac9019831e36  $archive" | sha256sum -c
+          mkdir -p "$RUNNER_TEMP/trilead213"
+          unzip -q "$archive" -d "$RUNNER_TEMP/trilead213"
+
+      - name: Compare vendored SSH source
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream_file="$(find "$RUNNER_TEMP/trilead213" -path '*/src/com/trilead/ssh2/Connection.java' -print -quit)"
+          test -n "$upstream_file"
+          upstream_dir="$(dirname "$(dirname "$(dirname "$(dirname "$upstream_file")")")")"
+          local_dir="Legacy-Evolved/service/src/main/java/com/trilead/ssh2"
+          output="$RUNNER_TEMP/trilead-build213-diff.txt"
+          {
+            echo "Baseline commit: 3d0b1838c0978051fb779a18bab37ac7a21e701f"
+            echo "Upstream archive SHA-256: 12159627166ff0e51d4ddcd546c568492b0f461a89214a0f014eac9019831e36"
+            echo "Upstream source: $upstream_dir"
+            echo "Local source: $local_dir"
+            echo
+            diff -ruN "$upstream_dir" "$local_dir" || true
+          } > "$output"
+          cat "$output"
+
+      - name: Upload source diff
+        uses: actions/upload-artifact@v4
+        with:
+          name: Trilead-Build213-Source-Diff
+          path: ${{ runner.temp }}/trilead-build213-diff.txt
+          if-no-files-found: error
