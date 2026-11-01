@@ -56,6 +56,9 @@ func ImportSKS(raw []byte, appVersionCode int, now time.Time) (Imported, error) 
 	props := make(map[string]string, len(document.Entries))
 	for _, entry := range document.Entries { props[entry.Key] = entry.Value }
 	if len(props) == 0 { return result, errors.New("profile contains no properties") }
+	for _, key := range []string{"file.proteger", "file.validade", "usarDefaultPayload", "sshPortaLocal"} {
+		if _, ok := props[key]; !ok { return result, fmt.Errorf("missing required profile property %q", key) }
+	}
 
 	version, err := requiredInt(props, "file.appVersionCode")
 	if err != nil { return result, err }
@@ -71,6 +74,9 @@ func ImportSKS(raw []byte, appVersionCode int, now time.Time) (Imported, error) 
 	}
 	if !protected || expiry < 0 { expiry = 0 }
 	if protected && expiry > 0 && now.UnixMilli() >= expiry { return result, errors.New("profile has expired") }
+
+	localPort, err := requiredInt(props, "sshPortaLocal")
+	if err != nil || localPort < 1 || localPort > 65535 { return result, errors.New("invalid local SOCKS port") }
 
 	host := props["sshServer"]
 	port, err := parsePort(props["sshPort"])
