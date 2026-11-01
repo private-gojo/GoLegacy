@@ -5,7 +5,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"errors"
-	"fmt"
 	"net"
 	"testing"
 
@@ -80,6 +79,6 @@ func TestKeyboardInteractivePasswordAuthentication(t *testing.T) {
 		t.Fatalf("close SSH client: %v", err)
 	}
 	if err := <-serverDone; err != nil {
-		t.Fatalf("SSH test server: %v", fmt.Errorf("server handshake: %w", err))
+		t.Fatalf("SSH test server handshake: %v", err)
 	}
 }
