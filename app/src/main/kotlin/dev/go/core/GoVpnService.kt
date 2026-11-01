@@ -151,8 +151,18 @@ class GoVpnService : VpnService() {
             .setMtu(1500)
             .addAddress("198.18.0.1", 32)
         builder.addDnsServer(InetAddress.getByName(dns))
-        val excludedRoutes = mutableListOf("10.0.0.0/8")
+        val excludedRoutes = mutableListOf("10.0.0.0/8", "198.18.0.0/24")
         if (!dnsForward) excludedRoutes.add("$dns/32")
+        val explicitExcludes = profile.optJSONArray("excludeIps")
+        if (explicitExcludes != null) {
+            for (i in 0 until explicitExcludes.length()) {
+                val ip = explicitExcludes.optString(i).trim()
+                if (ip.isNotEmpty()) excludedRoutes.add("$ip/32")
+            }
+        }
+        if (profile.optBoolean("tetheringSubnet", false)) {
+            excludedRoutes.addAll(listOf("192.168.42.0/23", "192.168.44.0/24", "192.168.49.0/24"))
+        }
         if (Build.VERSION.SDK_INT >= 33) {
             builder.addRoute("0.0.0.0", 0)
             excludedRoutes.forEach { route ->
@@ -162,6 +172,25 @@ class GoVpnService : VpnService() {
         } else {
             addIpv4RoutesExcluding(builder, excludedRoutes)
         }
+
+        if (profile.optBoolean("enableFilterApps", false)) {
+            val apps = profile.optJSONArray("filterApps") ?: error("App filter list is missing")
+            check(apps.length() > 0) { "App filtering requires at least one package" }
+            for (i in 0 until apps.length()) {
+                val packageName = apps.optString(i).trim()
+                if (packageName.isEmpty()) continue
+                try {
+                    if (profile.optBoolean("filterBypassMode", false)) {
+                        builder.addDisallowedApplication(packageName)
+                    } else {
+                        builder.addAllowedApplication(packageName)
+                    }
+                } catch (_: PackageManager.NameNotFoundException) {
+                    broadcastStatus("warning", "App filter package not found: $packageName")
+                }
+            }
+        }
+
         val descriptor = builder.establish() ?: error("VPN interface creation was denied")
         tun = descriptor
         if (generation != requestGeneration || stopRequested) {
